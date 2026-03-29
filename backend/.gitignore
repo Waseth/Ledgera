@@ -53,4 +53,7 @@ backups/
 # Testing
 .pytest_cache/
 .coverage
-htmlcov/
+htmlcov/test_system.sh
+test_system_fixed.sh
+test_*.sh
+test_*.sh
