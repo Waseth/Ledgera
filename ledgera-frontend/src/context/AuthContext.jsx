@@ -4,38 +4,42 @@ import { api } from '../api/client';
 const AuthContext = createContext();
 
 export function AuthProvider({ children }) {
-  const [user, setUser]       = useState(null);   // { role, email }
+  const [user, setUser] = useState(() => {
+    const stored = localStorage.getItem('ledgera-user');
+    return stored ? JSON.parse(stored) : null;
+  });
   const [loading, setLoading] = useState(true);
 
-  // Check session on mount by pinging a protected endpoint
+  // Verify token on mount
   useEffect(() => {
-    api.get('/days/status')
-      .then(() => {
-        // Session alive — read role from localStorage (set on login)
-        const stored = localStorage.getItem('ledgera-user');
-        if (stored) setUser(JSON.parse(stored));
-        else setUser({ role: 'unknown' });
-      })
-      .catch(() => {
-        setUser(null);
-        localStorage.removeItem('ledgera-user');
-      })
-      .finally(() => setLoading(false));
+    const token = localStorage.getItem('auth_token');
+    if (token) {
+      api.get('/auth/verify', true)
+        .then(() => {
+          // Token is valid, user already set from localStorage
+          setLoading(false);
+        })
+        .catch(() => {
+          // Token invalid
+          api.logout();
+          setUser(null);
+          setLoading(false);
+        });
+    } else {
+      setLoading(false);
+    }
   }, []);
 
   const login = useCallback(async (email, password) => {
-    const data = await api.post('/auth/login', { email, password });
-    const role = data.redirect.includes('dashboard') ? 'admin' : 'shopkeeper';
-    const userObj = { role, email };
+    const data = await api.login(email, password);
+    const userObj = { role: data.user.role, email: data.user.email, name: data.user.name };
     setUser(userObj);
-    localStorage.setItem('ledgera-user', JSON.stringify(userObj));
-    return role;
+    return data.user.role;
   }, []);
 
   const logout = useCallback(async () => {
-    await api.post('/auth/logout', {}).catch(() => {});
+    await api.logout();
     setUser(null);
-    localStorage.removeItem('ledgera-user');
   }, []);
 
   return (

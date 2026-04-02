@@ -1,54 +1,95 @@
 const BASE = process.env.REACT_APP_API_URL || '';
 
-async function request(method, path, body) {
+let authToken = localStorage.getItem('auth_token');
+let currentUser = JSON.parse(localStorage.getItem('ledgera-user') || 'null');
+
+function setAuthToken(token, user) {
+  authToken = token;
+  if (token && user) {
+    localStorage.setItem('auth_token', token);
+    localStorage.setItem('ledgera-user', JSON.stringify(user));
+    currentUser = user;
+  } else {
+    localStorage.removeItem('auth_token');
+    localStorage.removeItem('ledgera-user');
+    currentUser = null;
+  }
+}
+
+function getCurrentUser() {
+  return currentUser;
+}
+
+async function request(method, path, body, requiresAuth = true) {
+  const headers = {
+    'Content-Type': 'application/json',
+  };
+
+  if (requiresAuth && authToken) {
+    headers['Authorization'] = `Bearer ${authToken}`;
+  }
+
   const opts = {
     method,
-    credentials: 'include',
-    headers: {},
+    headers,
   };
+
   if (body !== undefined) {
-    opts.headers['Content-Type'] = 'application/json';
     opts.body = JSON.stringify(body);
   }
 
-  const res = await fetch(`${BASE}${path}`, opts);
+  try {
+    const res = await fetch(`${BASE}${path}`, opts);
+    const data = await res.json().catch(() => ({}));
 
-  // Handle session expiry
-  if (res.status === 401) {
-    localStorage.removeItem('ledgera-user');
-    window.location.href = '/login';
-    throw new Error('Unauthorized');
+    // Handle token expiry
+    if (res.status === 401) {
+      setAuthToken(null, null);
+      window.location.href = '/login';
+      throw new Error('Session expired. Please login again.');
+    }
+
+    if (!res.ok) {
+      const msg = data.error || (data.errors && data.errors.join(' ')) || `HTTP ${res.status}`;
+      throw new Error(msg);
+    }
+
+    return data;
+  } catch (err) {
+    if (err.message.includes('Failed to fetch')) {
+      throw new Error('Network error. Please check your connection.');
+    }
+    throw err;
   }
+}
 
-  const data = await res.json().catch(() => ({}));
+// Special login function that handles token storage
+async function login(email, password) {
+  const data = await request('POST', '/auth/login', { email, password }, false);
 
-  if (!res.ok) {
-    const msg = data.error || (data.errors && data.errors.join(' ')) || `HTTP ${res.status}`;
-    throw new Error(msg);
-  }
-
-  // Automatically extract data if it's a common response format
-  // If the response has a 'data' property that is an array or object, return that
-  // Otherwise return the whole response
-  if (data.data !== undefined) {
-    return data.data;
-  }
-
-  // Handle paginated responses
-  if (data.items !== undefined && Array.isArray(data.items)) {
-    return data.items;
-  }
-
-  // Handle responses with results array
-  if (data.results !== undefined && Array.isArray(data.results)) {
-    return data.results;
+  if (data.token && data.user) {
+    setAuthToken(data.token, data.user);
   }
 
   return data;
 }
 
+async function logout() {
+  try {
+    await request('POST', '/auth/logout', {}, true);
+  } catch (err) {
+    console.error('Logout error:', err);
+  } finally {
+    setAuthToken(null, null);
+  }
+}
+
 export const api = {
-  get:    (path)        => request('GET',  path),
-  post:   (path, body)  => request('POST', path, body),
-  delete: (path)        => request('DELETE', path),
+  get: (path, requiresAuth = true) => request('GET', path, undefined, requiresAuth),
+  post: (path, body, requiresAuth = true) => request('POST', path, body, requiresAuth),
+  delete: (path, requiresAuth = true) => request('DELETE', path, undefined, requiresAuth),
+  login,
+  logout,
+  getCurrentUser,
+  setAuthToken,
 };

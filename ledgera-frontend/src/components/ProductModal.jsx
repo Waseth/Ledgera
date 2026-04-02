@@ -1,12 +1,15 @@
 import { useState } from 'react';
+import { FiPackage, FiX, FiSave } from 'react-icons/fi';
 import Modal from './Modal';
 import { api } from '../api/client';
 import { useToast } from '../context/ToastContext';
+import { useAuth } from '../context/AuthContext';
 
 const UNITS = ['piece', 'kg', 'litre', 'packet', 'box', 'bundle', 'pair'];
 
 export default function ProductModal({ open, onClose, onSuccess }) {
   const { toast } = useToast();
+  const { user } = useAuth();
   const [form, setForm] = useState({
     name: '', quantity: '', buying_price: '', selling_price: '', unit: 'piece',
   });
@@ -43,24 +46,49 @@ export default function ProductModal({ open, onClose, onSuccess }) {
     ? (((parseFloat(form.selling_price) - parseFloat(form.buying_price)) / parseFloat(form.selling_price)) * 100).toFixed(1)
     : null;
 
+  // Only admin can add products
+  if (user?.role !== 'admin') {
+    return null;
+  }
+
   return (
-    <Modal open={open} onClose={onClose} title="➕ Add / Restock Product">
+    <Modal open={open} onClose={onClose} title="Add New Product">
       <div className="form-group">
-        <label className="form-label">Product Name</label>
-        <input className="form-input" placeholder="e.g. Sugar" value={form.name} onChange={set('name')} autoFocus />
-        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.3rem' }}>
-          If this product already exists, its stock will be increased.
+        <label className="form-label" style={{ fontFamily: 'Poppins, sans-serif' }}>Product Name</label>
+        <input
+          className="form-input"
+          placeholder="e.g., Sugar"
+          value={form.name}
+          onChange={set('name')}
+          autoFocus
+          style={{ fontFamily: 'Poppins, sans-serif' }}
+        />
+        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.3rem', fontFamily: 'Poppins, sans-serif' }}>
+          Add a new product to inventory.
         </div>
       </div>
 
       <div className="form-row">
         <div className="form-group">
-          <label className="form-label">Quantity</label>
-          <input className="form-input" type="number" min="0" placeholder="0" value={form.quantity} onChange={set('quantity')} />
+          <label className="form-label" style={{ fontFamily: 'Poppins, sans-serif' }}>Quantity</label>
+          <input
+            className="form-input"
+            type="number"
+            min="0"
+            placeholder="0"
+            value={form.quantity}
+            onChange={set('quantity')}
+            style={{ fontFamily: 'Poppins, sans-serif' }}
+          />
         </div>
         <div className="form-group">
-          <label className="form-label">Unit</label>
-          <select className="form-select" value={form.unit} onChange={set('unit')}>
+          <label className="form-label" style={{ fontFamily: 'Poppins, sans-serif' }}>Unit</label>
+          <select
+            className="form-select"
+            value={form.unit}
+            onChange={set('unit')}
+            style={{ fontFamily: 'Poppins, sans-serif' }}
+          >
             {UNITS.map(u => <option key={u}>{u}</option>)}
           </select>
         </div>
@@ -68,18 +96,33 @@ export default function ProductModal({ open, onClose, onSuccess }) {
 
       <div className="form-row">
         <div className="form-group">
-          <label className="form-label">Buying Price (KSh)</label>
-          <input className="form-input" type="number" min="0" step="0.01" placeholder="0.00" value={form.buying_price} onChange={set('buying_price')}
-            style={{ fontFamily: "'DM Mono', monospace" }} />
+          <label className="form-label" style={{ fontFamily: 'Poppins, sans-serif' }}>Buying Price (KSh)</label>
+          <input
+            className="form-input"
+            type="number"
+            min="0"
+            step="0.01"
+            placeholder="0.00"
+            value={form.buying_price}
+            onChange={set('buying_price')}
+            style={{ fontFamily: 'Poppins, sans-serif' }}
+          />
         </div>
         <div className="form-group">
-          <label className="form-label">Selling Price (KSh)</label>
-          <input className="form-input" type="number" min="0" step="0.01" placeholder="0.00" value={form.selling_price} onChange={set('selling_price')}
-            style={{ fontFamily: "'DM Mono', monospace" }} />
+          <label className="form-label" style={{ fontFamily: 'Poppins, sans-serif' }}>Selling Price (KSh)</label>
+          <input
+            className="form-input"
+            type="number"
+            min="0"
+            step="0.01"
+            placeholder="0.00"
+            value={form.selling_price}
+            onChange={set('selling_price')}
+            style={{ fontFamily: 'Poppins, sans-serif' }}
+          />
         </div>
       </div>
 
-      {/* Live margin preview */}
       {margin !== null && (
         <div style={{
           background: parseFloat(margin) > 0 ? 'var(--accent-green-dim)' : 'var(--accent-red-dim)',
@@ -88,19 +131,31 @@ export default function ProductModal({ open, onClose, onSuccess }) {
           marginBottom: '1rem',
           display: 'flex', justifyContent: 'space-between',
         }}>
-          <span style={{ fontFamily: "'Barlow Condensed'", fontWeight: 700, fontSize: '0.8rem', letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-secondary)' }}>
+          <span style={{ fontFamily: 'Poppins, sans-serif', fontWeight: 700, fontSize: '0.8rem', letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-secondary)' }}>
             Profit Margin
           </span>
-          <span style={{ fontFamily: "'DM Mono', monospace", fontWeight: 500, color: parseFloat(margin) > 0 ? 'var(--accent-green)' : 'var(--accent-red)' }}>
+          <span style={{ fontFamily: 'Poppins, sans-serif', fontWeight: 500, color: parseFloat(margin) > 0 ? 'var(--accent-green)' : 'var(--accent-red)' }}>
             {margin}%
           </span>
         </div>
       )}
 
       <div className="modal-footer">
-        <button className="btn btn-ghost" onClick={onClose} disabled={loading}>Cancel</button>
-        <button className="btn btn-primary" onClick={handleSubmit} disabled={loading}>
-          {loading ? 'Saving…' : 'Save Product'}
+        <button
+          className="btn btn-ghost"
+          onClick={onClose}
+          disabled={loading}
+          style={{ fontFamily: 'Poppins, sans-serif' }}
+        >
+          Cancel
+        </button>
+        <button
+          className="btn btn-primary"
+          onClick={handleSubmit}
+          disabled={loading}
+          style={{ fontFamily: 'Poppins, sans-serif', color: '#0F172A' }}
+        >
+          <FiSave size={14} /> {loading ? 'Saving...' : 'Save Product'}
         </button>
       </div>
     </Modal>

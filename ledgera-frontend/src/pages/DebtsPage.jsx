@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { FiDollarSign, FiUsers, FiPackage, FiSearch, FiRefreshCw, FiCheckCircle, FiAlertCircle } from 'react-icons/fi';
 import { api } from '../api/client';
 import { useToast } from '../context/ToastContext';
 import Modal from '../components/Modal';
@@ -16,12 +17,12 @@ const rowVariant = {
 
 export default function DebtsPage() {
   const { toast } = useToast();
-  const [debts,    setDebts]    = useState([]);
-  const [summary,  setSummary]  = useState(null);
-  const [loading,  setLoading]  = useState(true);
+  const [debts, setDebts] = useState([]);
+  const [summary, setSummary] = useState(null);
+  const [loading, setLoading] = useState(true);
   const [showPaid, setShowPaid] = useState(false);
-  const [search,   setSearch]   = useState('');
-  const [confirm,  setConfirm]  = useState(null); // debt id to confirm pay
+  const [search, setSearch] = useState('');
+  const [confirm, setConfirm] = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -30,10 +31,29 @@ export default function DebtsPage() {
         api.get(`/debts${showPaid ? '?paid=1' : ''}`),
         api.get('/debts/summary'),
       ]);
-      setDebts(d);
+
+      let debtsArray = [];
+      if (Array.isArray(d)) {
+        debtsArray = d;
+      } else if (d && typeof d === 'object') {
+        debtsArray = d.data || d.debts || d.items || [];
+        if (!Array.isArray(debtsArray) && d.id) {
+          debtsArray = [d];
+        }
+        if (!Array.isArray(debtsArray) && typeof d === 'object') {
+          const values = Object.values(d);
+          if (values.length > 0 && values[0] && typeof values[0] === 'object') {
+            debtsArray = values;
+          }
+        }
+      }
+
+      setDebts(debtsArray);
       setSummary(s);
     } catch (err) {
+      console.error('Failed to load debts:', err);
       toast(err.message, 'error');
+      setDebts([]);
     } finally {
       setLoading(false);
     }
@@ -52,13 +72,15 @@ export default function DebtsPage() {
     }
   };
 
-  const displayed = debts.filter(d =>
-    d.customer_name.toLowerCase().includes(search.toLowerCase()) ||
-    d.customer_phone.includes(search) ||
+  const safeDebts = Array.isArray(debts) ? debts : [];
+
+  const displayed = safeDebts.filter(d =>
+    d.customer_name?.toLowerCase().includes(search.toLowerCase()) ||
+    d.customer_phone?.includes(search) ||
     (d.product_name || '').toLowerCase().includes(search.toLowerCase())
   );
 
-  const confirmDebt = debts.find(d => d.id === confirm);
+  const confirmDebt = safeDebts.find(d => d.id === confirm);
 
   return (
     <div className="page-wrapper">
@@ -68,17 +90,19 @@ export default function DebtsPage() {
         animate={{ opacity: 1, y: 0 }}
         style={{ marginBottom: '1.5rem' }}
       >
-        <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 800, fontSize: '1.9rem', letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+        <h1 style={{ fontFamily: 'Poppins, sans-serif', fontWeight: 800, fontSize: '1.9rem', letterSpacing: '0.04em' }}>
           Debts
-        </div>
-        <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)', marginTop: '0.2rem' }}>
+        </h1>
+        <p style={{ fontFamily: 'Poppins, sans-serif', fontSize: '0.82rem', color: 'var(--text-muted)', marginTop: '0.2rem' }}>
+          <FiDollarSign size={12} style={{ display: 'inline', marginRight: '0.25rem' }} />
           Track and collect outstanding customer payments
-        </div>
+        </p>
       </motion.div>
 
       {/* Summary cards */}
       {summary && (
         <motion.div
+          className="kpi-grid"
           style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.875rem', marginBottom: '1.5rem' }}
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
@@ -88,140 +112,194 @@ export default function DebtsPage() {
             className={`card stat-card ${summary.outstanding_amount > 0 ? 'card-accent' : 'card-accent-green'}`}
             whileHover={{ y: -2, boxShadow: 'var(--shadow-lg)' }}
           >
-            <div style={{
-              fontFamily: "'DM Mono', monospace",
-              fontWeight: 500,
-              fontSize: '1.9rem',
-              color: summary.outstanding_amount > 0 ? 'var(--accent-amber)' : 'var(--accent-green)',
-              lineHeight: 1,
-            }}>
-              KSh {fmt(summary.outstanding_amount)}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+              <div>
+                <div className="stat-label" style={{ fontFamily: 'Poppins, sans-serif' }}>Outstanding Amount</div>
+                <div className="stat-value" style={{
+                  fontFamily: 'Poppins, sans-serif',
+                  fontSize: '1.9rem',
+                  fontWeight: 700,
+                  color: summary.outstanding_amount > 0 ? 'var(--accent-amber)' : 'var(--accent-green)'
+                }}>
+                  KSh {fmt(summary.outstanding_amount)}
+                </div>
+              </div>
+              <FiDollarSign size={28} color={summary.outstanding_amount > 0 ? 'var(--accent-amber)' : 'var(--accent-green)'} style={{ opacity: 0.7 }} />
             </div>
-            <div className="stat-label">Outstanding Amount</div>
           </motion.div>
 
           <motion.div
             className={`card stat-card ${summary.outstanding_count > 0 ? 'card-accent' : 'card-accent-green'}`}
             whileHover={{ y: -2, boxShadow: 'var(--shadow-lg)' }}
           >
-            <div style={{
-              fontFamily: "'Barlow Condensed', sans-serif",
-              fontWeight: 800,
-              fontSize: '2.6rem',
-              color: summary.outstanding_count > 0 ? 'var(--accent-rust)' : 'var(--accent-green)',
-              lineHeight: 1,
-            }}>
-              {summary.outstanding_count}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+              <div>
+                <div className="stat-label" style={{ fontFamily: 'Poppins, sans-serif' }}>Unpaid Debts</div>
+                <div className="stat-value" style={{
+                  fontFamily: 'Poppins, sans-serif',
+                  fontSize: '1.9rem',
+                  fontWeight: 700,
+                  color: summary.outstanding_count > 0 ? 'var(--accent-rust)' : 'var(--accent-green)'
+                }}>
+                  {summary.outstanding_count}
+                </div>
+              </div>
+              <FiUsers size={28} color={summary.outstanding_count > 0 ? 'var(--accent-rust)' : 'var(--accent-green)'} style={{ opacity: 0.7 }} />
             </div>
-            <div className="stat-label">Unpaid Debts</div>
           </motion.div>
         </motion.div>
       )}
 
-      {/* Controls */}
-      <div style={{ display: 'flex', gap: '0.65rem', marginBottom: '1rem', flexWrap: 'wrap', alignItems: 'center' }}>
-        <input
-          className="form-input"
-          style={{ maxWidth: 280, flex: 1 }}
-          placeholder="Search by name, phone or product…"
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-        />
-        <div style={{ display: 'flex', gap: '0.4rem' }}>
+      {/* Controls - Search and Refresh on one line, filters below on mobile */}
+      <div style={{
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '0.65rem',
+        marginBottom: '1rem'
+      }}>
+        {/* Row 1: Search + Refresh button */}
+        <div style={{
+          display: 'flex',
+          gap: '0.65rem',
+          alignItems: 'center',
+          flexWrap: 'wrap'
+        }}>
+          <div style={{ position: 'relative', flex: 1, minWidth: '200px' }}>
+            <FiSearch style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} size={14} />
+            <input
+              className="form-input"
+              style={{ paddingLeft: '2rem', fontFamily: 'Poppins, sans-serif', width: '100%' }}
+              placeholder="Search by name, phone or product..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+            />
+          </div>
+          <button className="btn btn-outline btn-sm" onClick={load} style={{ fontFamily: 'Poppins, sans-serif', whiteSpace: 'nowrap' }}>
+            <FiRefreshCw size={14} /> Refresh
+          </button>
+        </div>
+
+        {/* Row 2: Filter buttons */}
+        <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
           <button
-            className={`btn btn-sm ${!showPaid ? 'btn-primary' : 'btn-ghost'}`}
+            className={`btn btn-sm ${!showPaid ? 'btn-primary' : 'btn-outline'}`}
             onClick={() => setShowPaid(false)}
+            style={{
+              fontFamily: 'Poppins, sans-serif',
+              ...(!showPaid ? { color: '#0F172A' } : {})
+            }}
           >
             Unpaid ({summary?.outstanding_count ?? '…'})
           </button>
           <button
-            className={`btn btn-sm ${showPaid ? 'btn-primary' : 'btn-ghost'}`}
+            className={`btn btn-sm ${showPaid ? 'btn-primary' : 'btn-outline'}`}
             onClick={() => setShowPaid(true)}
+            style={{
+              fontFamily: 'Poppins, sans-serif',
+              ...(showPaid ? { color: '#0F172A' } : {})
+            }}
           >
             All Debts
           </button>
         </div>
-        <button className="btn btn-ghost btn-sm" onClick={load} style={{ marginLeft: 'auto' }}>↻ Refresh</button>
       </div>
 
-      {/* Table */}
+      {/* Scrollable Table */}
       <motion.div
         className="table-wrap"
         initial={{ opacity: 0, y: 16 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.15 }}
+        style={{
+          overflowX: 'auto',
+          WebkitOverflowScrolling: 'touch',
+        }}
       >
-        <table>
-          <thead>
-            <tr>
-              <th>Customer</th>
-              <th>Phone</th>
-              <th>Product</th>
-              <th>Amount (KSh)</th>
-              <th>Date</th>
-              <th>Status</th>
-              <th>Action</th>
-            </tr>
-          </thead>
-          <motion.tbody variants={container} initial="hidden" animate="show">
-            {loading && (
-              [...Array(5)].map((_, i) => (
-                <tr key={i}>
-                  {[...Array(7)].map((__, j) => (
-                    <td key={j}><div className="skeleton" style={{ height: 14, width: '75%', borderRadius: 4 }} /></td>
-                  ))}
+        <div style={{ minWidth: '800px' }}>
+          <table className="table">
+            <thead>
+              <tr>
+                <th style={{ fontFamily: 'Poppins, sans-serif' }}>Customer</th>
+                <th style={{ fontFamily: 'Poppins, sans-serif' }}>Phone</th>
+                <th style={{ fontFamily: 'Poppins, sans-serif' }}>Product</th>
+                <th style={{ fontFamily: 'Poppins, sans-serif' }}>Amount (KSh)</th>
+                <th style={{ fontFamily: 'Poppins, sans-serif' }}>Date</th>
+                <th style={{ fontFamily: 'Poppins, sans-serif' }}>Status</th>
+                <th style={{ fontFamily: 'Poppins, sans-serif' }}>Action</th>
+              </tr>
+            </thead>
+            <motion.tbody variants={container} initial="hidden" animate="show">
+              {loading && (
+                [...Array(5)].map((_, i) => (
+                  <tr key={i}>
+                    {[...Array(7)].map((__, j) => (
+                      <td key={j}><div className="skeleton" style={{ height: 14, width: '75%', borderRadius: 4 }} /></td>
+                    ))}
+                  </tr>
+                ))
+              )}
+              {!loading && displayed.length === 0 && (
+                <tr>
+                  <td colSpan={7}>
+                    <div style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      padding: '3rem 1rem',
+                      textAlign: 'center',
+                    }}>
+                      <FiCheckCircle size={48} style={{ opacity: 0.4, marginBottom: '1rem', color: 'var(--text-muted)' }} />
+                      <p style={{ fontFamily: 'Poppins, sans-serif', color: 'var(--text-muted)', marginBottom: '0.5rem' }}>
+                        {search ? 'No matching debts' : showPaid ? 'No debts recorded' : 'No unpaid debts'}
+                      </p>
+                    </div>
+                   </td>
                 </tr>
-              ))
-            )}
-            {!loading && displayed.length === 0 && (
-              <tr><td colSpan={7}>
-                <div className="empty-state">
-                  <div className="empty-state-icon">✓</div>
-                  <p>{search ? 'No matching debts' : showPaid ? 'No debts recorded' : 'No unpaid debts'}</p>
-                </div>
-              </td></tr>
-            )}
-            {!loading && displayed.map(d => (
-              <motion.tr
-                key={d.id}
-                variants={rowVariant}
-                style={d.is_paid ? { opacity: 0.55 } : {}}
-              >
-                <td style={{ fontWeight: 600 }}>{d.customer_name}</td>
-                <td>
-                  <a
-                    href={`tel:${d.customer_phone}`}
-                    style={{ fontFamily: "'DM Mono', monospace", fontSize: '0.82rem', color: 'var(--accent-teal)', textDecoration: 'none' }}
-                  >
-                    {d.customer_phone}
-                  </a>
-                </td>
-                <td style={{ color: 'var(--text-secondary)' }}>{d.product_name}</td>
-                <td className="td-mono" style={{ fontWeight: 600, color: d.is_paid ? 'var(--accent-green)' : 'var(--accent-amber)' }}>
-                  {fmt(d.amount)}
-                </td>
-                <td className="td-mono" style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>
-                  {d.created_at?.substring(0, 10)}
-                </td>
-                <td>
-                  <span className={`badge ${d.is_paid ? 'badge-cash' : 'badge-debt'}`}>
-                    {d.is_paid ? `Paid ${d.paid_at?.substring(0, 10) || ''}` : 'Unpaid'}
-                  </span>
-                </td>
-                <td>
-                  {!d.is_paid && (
-                    <button
-                      className="btn btn-green btn-sm"
-                      onClick={() => setConfirm(d.id)}
+              )}
+              {!loading && displayed.map(d => (
+                <motion.tr
+                  key={d.id}
+                  variants={rowVariant}
+                  style={d.is_paid ? { opacity: 0.55 } : {}}
+                >
+                  <td style={{ fontFamily: 'Poppins, sans-serif', fontWeight: 600, whiteSpace: 'nowrap' }}>{d.customer_name}</td>
+                  <td style={{ whiteSpace: 'nowrap' }}>
+                    <a
+                      href={`tel:${d.customer_phone}`}
+                      style={{ fontFamily: 'Poppins, sans-serif', fontSize: '0.82rem', color: 'var(--accent-teal)', textDecoration: 'none' }}
                     >
-                      Mark Paid
-                    </button>
-                  )}
-                </td>
-              </motion.tr>
-            ))}
-          </motion.tbody>
-        </table>
+                      {d.customer_phone}
+                    </a>
+                  </td>
+                  <td style={{ fontFamily: 'Poppins, sans-serif', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>{d.product_name}</td>
+                  <td className="td-mono" style={{ fontFamily: 'Poppins, sans-serif', fontWeight: 600, color: d.is_paid ? 'var(--accent-green)' : 'var(--accent-amber)', whiteSpace: 'nowrap' }}>
+                    {fmt(d.amount)}
+                  </td>
+                  <td className="td-mono" style={{ fontFamily: 'Poppins, sans-serif', color: 'var(--text-muted)', fontSize: '0.8rem', whiteSpace: 'nowrap' }}>
+                    {d.created_at?.substring(0, 10)}
+                  </td>
+                  <td style={{ whiteSpace: 'nowrap' }}>
+                    <span className={`badge ${d.is_paid ? 'badge-success' : 'badge-warning'}`} style={{ fontFamily: 'Poppins, sans-serif' }}>
+                      {d.is_paid ? `Paid ${d.paid_at?.substring(0, 10) || ''}` : 'Unpaid'}
+                    </span>
+                  </td>
+                  <td style={{ whiteSpace: 'nowrap' }}>
+                    {!d.is_paid && (
+                      <button
+                        className="btn btn-primary btn-sm"
+                        onClick={() => setConfirm(d.id)}
+                        style={{ fontFamily: 'Poppins, sans-serif', color: '#0F172A' }}
+                      >
+                        Mark Paid
+                      </button>
+                    )}
+                  </td>
+                </motion.tr>
+              ))}
+            </motion.tbody>
+          </table>
+        </div>
       </motion.div>
 
       {/* Confirm pay modal */}
@@ -242,33 +320,42 @@ export default function DebtsPage() {
               gap: '0.5rem',
             }}>
               {[
-                { label: 'Customer',  value: confirmDebt.customer_name  },
-                { label: 'Phone',     value: confirmDebt.customer_phone  },
-                { label: 'Product',   value: confirmDebt.product_name    },
-                { label: 'Amount',    value: `KSh ${fmt(confirmDebt.amount)}` },
+                { label: 'Customer', value: confirmDebt.customer_name },
+                { label: 'Phone', value: confirmDebt.customer_phone },
+                { label: 'Product', value: confirmDebt.product_name },
+                { label: 'Amount', value: `KSh ${fmt(confirmDebt.amount)}` },
               ].map(row => (
                 <div key={row.label} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.875rem' }}>
-                  <span style={{ color: 'var(--text-secondary)', fontFamily: "'Barlow Condensed'", fontWeight: 700, fontSize: '0.78rem', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+                  <span style={{ fontFamily: 'Poppins, sans-serif', fontWeight: 700, fontSize: '0.78rem', letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-secondary)' }}>
                     {row.label}
                   </span>
-                  <span style={{ fontFamily: row.label === 'Amount' ? "'DM Mono', monospace" : 'inherit', fontWeight: row.label === 'Amount' ? 600 : 400, color: row.label === 'Amount' ? 'var(--accent-green)' : 'var(--text-primary)' }}>
+                  <span style={{ fontFamily: 'Poppins, sans-serif', fontWeight: row.label === 'Amount' ? 600 : 400, color: row.label === 'Amount' ? 'var(--accent-green)' : 'var(--text-primary)' }}>
                     {row.value}
                   </span>
                 </div>
               ))}
             </div>
-            <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)', marginBottom: '1.25rem' }}>
+            <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)', marginBottom: '1.25rem', fontFamily: 'Poppins, sans-serif' }}>
               This action cannot be undone. The debt will be permanently marked as paid.
             </div>
             <div className="modal-footer">
-              <button className="btn btn-ghost" onClick={() => setConfirm(null)}>Cancel</button>
-              <button className="btn btn-green" onClick={() => markPaid(confirm)}>
-                ✓ Confirm Payment
+              <button className="btn btn-outline" onClick={() => setConfirm(null)} style={{ fontFamily: 'Poppins, sans-serif' }}>Cancel</button>
+              <button className="btn btn-primary" onClick={() => markPaid(confirm)} style={{ fontFamily: 'Poppins, sans-serif', color: '#0F172A' }}>
+                <FiCheckCircle size={14} /> Confirm Payment
               </button>
             </div>
           </>
         )}
       </Modal>
+
+      {/* Responsive CSS */}
+      <style>{`
+        @media (max-width: 768px) {
+          .kpi-grid {
+            grid-template-columns: 1fr !important;
+          }
+        }
+      `}</style>
     </div>
   );
 }

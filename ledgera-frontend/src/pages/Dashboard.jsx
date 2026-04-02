@@ -1,36 +1,47 @@
 import { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
+import {
+  FiDollarSign, FiTrendingUp, FiTrendingDown, FiActivity,
+  FiRefreshCw, FiPlus, FiCalendar, FiLock, FiAlertCircle
+} from 'react-icons/fi';
+import {
+  AreaChart, Area, BarChart, Bar, LineChart, Line,
+  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  ComposedChart, ReferenceLine
+} from 'recharts';
 import { api } from '../api/client';
 import { useToast } from '../context/ToastContext';
-import StatCard from '../components/StatCard';
-import Modal from '../components/Modal';
-import DayModal from '../components/DayModal';
 import ProductModal from '../components/ProductModal';
-import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid,
-  Tooltip, ResponsiveContainer,
-} from 'recharts';
-
-const container = {
-  hidden: {},
-  show: { transition: { staggerChildren: 0.07 } },
-};
-const item = {
-  hidden: { opacity: 0, y: 18 },
-  show:   { opacity: 1, y: 0, transition: { duration: 0.4, ease: [0.4,0,0.2,1] } },
-};
 
 const fmt = n => Number(n || 0).toLocaleString('en-KE', {
   minimumFractionDigits: 2, maximumFractionDigits: 2,
 });
 
+const CustomTooltip = ({ active, payload, label }) => {
+  if (active && payload && payload.length) {
+    return (
+      <div style={{
+        background: 'var(--bg-card)',
+        border: '1px solid var(--border-medium)',
+        borderRadius: 'var(--radius-md)',
+        padding: '0.5rem 1rem',
+        boxShadow: 'var(--shadow-md)',
+      }}>
+        <p style={{ fontFamily: 'Poppins, sans-serif', fontWeight: 600, marginBottom: '0.25rem' }}>{label}</p>
+        <p style={{ fontFamily: 'Poppins, sans-serif', color: 'var(--primary-blue)' }}>Revenue: KSh {fmt(payload[0]?.value)}</p>
+        <p style={{ fontFamily: 'Poppins, sans-serif', color: 'var(--accent-green)' }}>Profit: KSh {fmt(payload[1]?.value)}</p>
+      </div>
+    );
+  }
+  return null;
+};
+
 export default function Dashboard() {
   const { toast } = useToast();
-  const [data,    setData]    = useState(null);
-  const [weekly,  setWeekly]  = useState(null);
+  const [data, setData] = useState(null);
+  const [weekly, setWeekly] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [dayModal,setDayModal]= useState(null); // 'open' | 'close'
-  const [prodModal,setProdModal] = useState(false);
+  const [prodModal, setProdModal] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -51,160 +62,218 @@ export default function Dashboard() {
 
   if (loading) return (
     <div className="page-wrapper">
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '0.875rem' }}>
-        {[...Array(6)].map((_, i) => (
-          <div key={i} className="skeleton" style={{ height: 140, borderRadius: 12 }} />
+      <div className="kpi-grid">
+        {[...Array(4)].map((_, i) => (
+          <div key={i} className="skeleton" style={{ height: 120, borderRadius: 'var(--radius-lg)' }} />
         ))}
       </div>
     </div>
   );
 
-  const barData = weekly?.daily_breakdown?.map(d => ({
-    date: d.date.slice(5),
-    revenue: d.revenue,
-    profit: d.profit,
+  // Prepare chart data with gradient effect
+  const chartData = weekly?.daily_breakdown?.map(day => ({
+    date: new Date(day.date).toLocaleDateString('en-US', { weekday: 'short' }),
+    fullDate: day.date,
+    revenue: day.revenue,
+    profit: day.profit,
+    sales: day.sale_count,
   })) || [];
+
+  // Find today's data point for highlighting
+  const todayStr = new Date().toISOString().split('T')[0];
+  const todayIndex = chartData.findIndex(d => d.fullDate === todayStr);
 
   return (
     <div className="page-wrapper">
-      {/* Title */}
+      {/* Header */}
       <motion.div
-        initial={{ opacity: 0, y: -10 }}
+        initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
-        style={{ marginBottom: '1.5rem', display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.75rem' }}
+        style={{ marginBottom: '1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}
       >
         <div>
-          <div style={{
-            fontFamily: "'Barlow Condensed', sans-serif",
-            fontWeight: 800, fontSize: '1.9rem',
-            letterSpacing: '0.04em', textTransform: 'uppercase',
-            color: 'var(--text-primary)',
-          }}>
-            Admin Dashboard
-          </div>
-          <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)', marginTop: '0.2rem' }}>
-            {new Date().toLocaleDateString('en-KE', { weekday:'long', year:'numeric', month:'long', day:'numeric' })}
-          </div>
+          <h1 style={{ fontFamily: 'Poppins, sans-serif', fontSize: '1.75rem', fontWeight: 700 }}>Dashboard</h1>
+          <p style={{ fontFamily: 'Poppins, sans-serif', color: 'var(--text-muted)', fontSize: '0.85rem', marginTop: '0.25rem' }}>
+            {new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+          </p>
         </div>
-        <div className="action-row" style={{ marginBottom: 0 }}>
-          <button className="btn btn-teal btn-sm" onClick={() => setDayModal('open')}>📅 Open Day</button>
-          <button className="btn btn-danger btn-sm" onClick={() => setDayModal('close')}>🔒 Close Day</button>
-          <button className="btn btn-primary btn-sm" onClick={() => setProdModal(true)}>➕ Product</button>
-          <button className="btn btn-ghost btn-sm" onClick={load}>↻ Refresh</button>
-        </div>
-      </motion.div>
-
-      {/* TODAY */}
-      <div className="section-header">Today's Performance</div>
-      <motion.div
-        className="kpi-grid"
-        variants={container}
-        initial="hidden"
-        animate="show"
-      >
-        <motion.div variants={item}>
-          <StatCard value={data?.today?.revenue}    label="Today Revenue"    prefix="KSh " decimals={2} accentClass="card-accent-teal" />
-        </motion.div>
-        <motion.div variants={item}>
-          <StatCard value={data?.today?.profit}     label="Today Gross Profit" prefix="KSh " decimals={2} valueColor="var(--accent-green)" />
-        </motion.div>
-        <motion.div variants={item}>
-          <StatCard value={data?.today?.net_profit} label="Today Net Profit" prefix="KSh " decimals={2}
-            valueColor={data?.today?.net_profit >= 0 ? 'var(--accent-green)' : 'var(--accent-red)'}
-            sub={`After KSh ${fmt(data?.today?.expenses)} expenses`}
-          />
-        </motion.div>
-      </motion.div>
-
-      {/* WEEK */}
-      <div className="section-header section-gap">7-Day Overview</div>
-      <motion.div
-        className="kpi-grid"
-        variants={container}
-        initial="hidden"
-        animate="show"
-      >
-        <motion.div variants={item}>
-          <StatCard value={data?.week?.revenue}     label="Week Revenue"    prefix="KSh " decimals={2} sub={`${data?.week?.sale_count} total sales`} />
-        </motion.div>
-        <motion.div variants={item}>
-          <StatCard value={data?.week?.net_profit}  label="Week Net Profit" prefix="KSh " decimals={2}
-            valueColor={data?.week?.net_profit >= 0 ? 'var(--accent-green)' : 'var(--accent-red)'}
-          />
-        </motion.div>
-        <motion.div variants={item}>
-          <StatCard
-            value={data?.outstanding_debt} label="Outstanding Debt" prefix="KSh " decimals={2}
-            valueColor={data?.outstanding_debt > 0 ? 'var(--accent-amber)' : 'var(--text-primary)'}
-            accentClass={data?.outstanding_debt > 0 ? 'card-accent' : ''}
-          />
-        </motion.div>
-      </motion.div>
-
-      {/* Low stock */}
-      <motion.div variants={item} style={{ marginTop: '0.875rem' }}>
-        <StatCard
-          value={data?.low_stock_count} label="Low Stock Items" decimals={0}
-          valueColor={data?.low_stock_count > 0 ? 'var(--accent-red)' : 'var(--accent-green)'}
-          accentClass={data?.low_stock_count > 0 ? 'card-accent-red' : 'card-accent-green'}
-          sub={data?.low_stock_count > 0 ? 'Restock required' : 'All products stocked'}
-        />
-      </motion.div>
-
-      {/* Weekly bar chart */}
-      {barData.length > 0 && (
-        <>
-          <div className="section-header section-gap">Revenue — Last 7 Days</div>
-          <motion.div
-            className="card"
-            style={{ padding: '1.25rem' }}
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.3 }}
+        <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+          <button className="btn btn-outline btn-sm" onClick={load}>
+            <FiRefreshCw size={14} /> Refresh
+          </button>
+          <button
+            className="btn btn-primary btn-sm"
+            onClick={() => setProdModal(true)}
+            style={{ color: '#0F172A' }}
           >
-            <ResponsiveContainer width="100%" height={220}>
-              <BarChart data={barData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
-                <CartesianGrid vertical={false} stroke="var(--border-subtle)" />
-                <XAxis
-                  dataKey="date"
-                  tick={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 11, fill: 'var(--text-secondary)' }}
-                  axisLine={false} tickLine={false}
-                />
-                <YAxis
-                  tick={{ fontFamily: "'DM Mono', monospace", fontSize: 10, fill: 'var(--text-muted)' }}
-                  axisLine={false} tickLine={false} width={60}
-                  tickFormatter={v => `${(v/1000).toFixed(0)}k`}
-                />
-                <Tooltip
-                  contentStyle={{
-                    background: 'var(--bg-card)',
-                    border: '1px solid var(--border-medium)',
-                    borderRadius: 8,
-                    fontFamily: "'DM Sans', sans-serif",
-                    fontSize: '0.82rem',
-                    boxShadow: 'var(--shadow-md)',
-                  }}
-                  formatter={(v, name) => [`KSh ${fmt(v)}`, name === 'revenue' ? 'Revenue' : 'Profit']}
-                  labelStyle={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700 }}
-                />
-                <Bar dataKey="revenue" fill="var(--accent-teal)"  radius={[4,4,0,0]} />
-                <Bar dataKey="profit"  fill="var(--accent-rust)"  radius={[4,4,0,0]} opacity={0.7} />
-              </BarChart>
-            </ResponsiveContainer>
-            <div style={{ display: 'flex', gap: '1.25rem', marginTop: '0.75rem', justifyContent: 'center' }}>
-              {[{ color: 'var(--accent-teal)', label: 'Revenue' }, { color: 'var(--accent-rust)', label: 'Profit' }].map(l => (
-                <div key={l.label} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
-                  <div style={{ width: 10, height: 10, borderRadius: 2, background: l.color }} />
-                  <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase' }}>{l.label}</span>
-                </div>
-              ))}
+            <FiPlus size={14} /> Add Product
+          </button>
+        </div>
+      </motion.div>
+
+      {/* KPI Cards */}
+      <motion.div
+        className="kpi-grid"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ staggerChildren: 0.1 }}
+      >
+        <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.1 }}>
+          <div className="card stat-card">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+              <div>
+                <div className="stat-label" style={{ fontFamily: 'Poppins, sans-serif' }}>Today's Revenue</div>
+                <div className="stat-value" style={{ fontFamily: 'Poppins, sans-serif' }}>KSh {fmt(data?.today?.revenue)}</div>
+              </div>
+              <FiDollarSign size={28} color="var(--primary-blue)" style={{ opacity: 0.7 }} />
             </div>
-          </motion.div>
-        </>
+          </div>
+        </motion.div>
+
+        <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.2 }}>
+          <div className="card stat-card">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+              <div>
+                <div className="stat-label" style={{ fontFamily: 'Poppins, sans-serif' }}>Today's Profit</div>
+                <div className="stat-value" style={{ fontFamily: 'Poppins, sans-serif' }}>KSh {fmt(data?.today?.net_profit)}</div>
+              </div>
+              <FiTrendingUp size={28} color="var(--accent-green)" style={{ opacity: 0.7 }} />
+            </div>
+          </div>
+        </motion.div>
+
+        <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.3 }}>
+          <div className="card stat-card">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+              <div>
+                <div className="stat-label" style={{ fontFamily: 'Poppins, sans-serif' }}>Week Revenue</div>
+                <div className="stat-value" style={{ fontFamily: 'Poppins, sans-serif' }}>KSh {fmt(data?.week?.revenue)}</div>
+              </div>
+              <FiActivity size={28} color="var(--accent-teal)" style={{ opacity: 0.7 }} />
+            </div>
+          </div>
+        </motion.div>
+
+        <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.4 }}>
+          <div className="card stat-card">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+              <div>
+                <div className="stat-label" style={{ fontFamily: 'Poppins, sans-serif' }}>Outstanding Debt</div>
+                <div className="stat-value" style={{ fontFamily: 'Poppins, sans-serif' }}>KSh {fmt(data?.outstanding_debt)}</div>
+              </div>
+              <FiTrendingDown size={28} color="var(--accent-amber)" style={{ opacity: 0.7 }} />
+            </div>
+          </div>
+        </motion.div>
+      </motion.div>
+
+      {/* Revenue & Profit Chart */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.5 }}
+        className="chart-container"
+        style={{ marginTop: '1.5rem' }}
+      >
+        <div style={{ marginBottom: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
+          <div>
+            <h3 style={{ fontFamily: 'Poppins, sans-serif', fontSize: '1rem', fontWeight: 600 }}>Revenue & Profit Trend</h3>
+            <p style={{ fontFamily: 'Poppins, sans-serif', fontSize: '0.75rem', color: 'var(--text-muted)' }}>Last 7 days performance</p>
+          </div>
+          <div style={{ display: 'flex', gap: '1rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+              <div style={{ width: 12, height: 12, background: 'var(--primary-blue)', borderRadius: 2 }} />
+              <span style={{ fontFamily: 'Poppins, sans-serif', fontSize: '0.7rem' }}>Revenue</span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+              <div style={{ width: 12, height: 12, background: 'var(--accent-green)', borderRadius: 2 }} />
+              <span style={{ fontFamily: 'Poppins, sans-serif', fontSize: '0.7rem' }}>Profit</span>
+            </div>
+          </div>
+        </div>
+
+        <ResponsiveContainer width="100%" height={320}>
+          <ComposedChart data={chartData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+            <defs>
+              <linearGradient id="revenueGradient" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%" stopColor="var(--primary-blue)" stopOpacity={0.3}/>
+                <stop offset="95%" stopColor="var(--primary-blue)" stopOpacity={0}/>
+              </linearGradient>
+              <linearGradient id="profitGradient" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%" stopColor="var(--accent-green)" stopOpacity={0.3}/>
+                <stop offset="95%" stopColor="var(--accent-green)" stopOpacity={0}/>
+              </linearGradient>
+            </defs>
+            <CartesianGrid strokeDasharray="3 3" stroke="var(--border-subtle)" />
+            <XAxis dataKey="date" tick={{ fontFamily: 'Poppins, sans-serif', fill: 'var(--text-muted)', fontSize: 11 }} />
+            <YAxis tick={{ fontFamily: 'Poppins, sans-serif', fill: 'var(--text-muted)', fontSize: 11 }} tickFormatter={(v) => `KSh ${(v/1000).toFixed(0)}k`} />
+            <Tooltip content={<CustomTooltip />} />
+            <Area type="monotone" dataKey="revenue" stroke="var(--primary-blue)" fill="url(#revenueGradient)" strokeWidth={2} />
+            <Area type="monotone" dataKey="profit" stroke="var(--accent-green)" fill="url(#profitGradient)" strokeWidth={2} />
+            <Line type="monotone" dataKey="revenue" stroke="var(--primary-blue)" strokeWidth={2} dot={{ r: 4, fill: 'var(--primary-blue)' }} activeDot={{ r: 6 }} />
+            <Line type="monotone" dataKey="profit" stroke="var(--accent-green)" strokeWidth={2} dot={{ r: 4, fill: 'var(--accent-green)' }} activeDot={{ r: 6 }} />
+            {todayIndex >= 0 && (
+              <ReferenceLine x={chartData[todayIndex]?.date} stroke="var(--accent-amber)" strokeDasharray="3 3" label={{ value: 'Today', fill: 'var(--accent-amber)', fontSize: 10 }} />
+            )}
+          </ComposedChart>
+        </ResponsiveContainer>
+      </motion.div>
+
+      {/* Sales Bar Chart */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.6 }}
+        className="chart-container"
+        style={{ marginTop: '1.5rem' }}
+      >
+        <div style={{ marginBottom: '1rem' }}>
+          <h3 style={{ fontFamily: 'Poppins, sans-serif', fontSize: '1rem', fontWeight: 600 }}>Daily Sales Count</h3>
+          <p style={{ fontFamily: 'Poppins, sans-serif', fontSize: '0.75rem', color: 'var(--text-muted)' }}>Number of transactions per day</p>
+        </div>
+        <ResponsiveContainer width="100%" height={200}>
+          <BarChart data={chartData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="var(--border-subtle)" />
+            <XAxis dataKey="date" tick={{ fontFamily: 'Poppins, sans-serif', fill: 'var(--text-muted)', fontSize: 11 }} />
+            <YAxis tick={{ fontFamily: 'Poppins, sans-serif', fill: 'var(--text-muted)', fontSize: 11 }} />
+            <Tooltip contentStyle={{ fontFamily: 'Poppins, sans-serif' }} />
+            <Bar dataKey="sales" fill="var(--accent-teal)" radius={[4,4,0,0]} />
+          </BarChart>
+        </ResponsiveContainer>
+      </motion.div>
+
+      {/* Low Stock Alert */}
+      {data?.low_stock_count > 0 && (
+        <motion.div
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          style={{
+            marginTop: '1.5rem',
+            background: 'var(--accent-red-dim)',
+            border: '1px solid var(--accent-red)',
+            borderRadius: 'var(--radius-md)',
+            padding: '1rem',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: '1rem',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            <FiAlertCircle color="var(--accent-red)" size={24} />
+            <span style={{ fontFamily: 'Poppins, sans-serif' }}>{data.low_stock_count} product(s) need restocking</span>
+          </div>
+          <button
+            className="btn btn-primary btn-sm"
+            onClick={() => setProdModal(true)}
+            style={{ color: '#0F172A' }}
+          >
+            Restock Now
+          </button>
+        </motion.div>
       )}
 
-      {/* Modals */}
-      <DayModal mode={dayModal} onClose={() => setDayModal(null)} onSuccess={load} />
       <ProductModal open={prodModal} onClose={() => setProdModal(false)} onSuccess={load} />
     </div>
   );
