@@ -7,6 +7,7 @@ without polluting global state, and keeps imports clean.
 
 import logging
 from flask import Flask
+from flask_cors import CORS  # Add this import
 from werkzeug.security import generate_password_hash
 
 from config import Config
@@ -16,6 +17,28 @@ from app.extensions import db, login_manager
 def create_app(config_class=Config):
     app = Flask(__name__)
     app.config.from_object(config_class)
+
+    # -----------------------------------------------------------------------
+    # CORS Configuration - REQUIRED for production
+    # -----------------------------------------------------------------------
+    # Get allowed origins from environment or use defaults
+    allowed_origins = app.config.get('CORS_ORIGINS', [
+        'http://localhost:3000',           # Local development
+        'https://ledgera-frontend.railway.app',  # If frontend on Railway
+        'https://ledgera-production-d434.up.railway.app'  # Backend itself
+    ])
+
+    CORS(app,
+         origins=allowed_origins,
+         supports_credentials=True,
+         allow_headers=['Content-Type', 'Authorization', 'X-Requested-With'],
+         expose_headers=['Content-Type', 'Authorization'],
+         methods=['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+         max_age=3600  # Cache preflight requests for 1 hour
+    )
+
+    # Log CORS configuration
+    app.logger.info(f"CORS enabled for origins: {allowed_origins}")
 
     # -----------------------------------------------------------------------
     # Logging: only errors – saves CPU cycles writing unnecessary log lines
