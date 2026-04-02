@@ -22,7 +22,7 @@ from app import cache as app_cache
 # GET /products  – list all products
 # ---------------------------------------------------------------------------
 @products_bp.route("", methods=["GET"])
-@login_required
+@token_required
 def list_products():
     """
     Returns cached product list.
@@ -47,7 +47,7 @@ def list_products():
 # GET /products/<id>  – single product
 # ---------------------------------------------------------------------------
 @products_bp.route("/<int:product_id>", methods=["GET"])
-@login_required
+@token_required
 def get_product(product_id):
     row = db.session.query(
         Product.id, Product.name, Product.buying_price,
@@ -71,7 +71,7 @@ def get_product(product_id):
 # POST /products  – add new OR restock existing (ADMIN ONLY)
 # ---------------------------------------------------------------------------
 @products_bp.route("", methods=["POST"])
-@login_required
+@token_required
 def add_or_restock():
     """
     If a product with the same name exists → increase quantity (restock).
@@ -165,7 +165,7 @@ def add_or_restock():
 # GET /products/low-stock  – items at or below threshold
 # ---------------------------------------------------------------------------
 @products_bp.route("/low-stock", methods=["GET"])
-@login_required
+@token_required
 def low_stock():
     """
     Returns cached low-stock list.

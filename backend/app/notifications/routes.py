@@ -19,7 +19,7 @@ from app.models import Notification
 # GET /notifications  – fetch latest unread (or all)
 # ---------------------------------------------------------------------------
 @notifications_bp.route("", methods=["GET"])
-@login_required
+@token_required
 def list_notifications():
     """
     Returns latest 20 unread notifications for this user OR broadcast
@@ -63,7 +63,7 @@ def list_notifications():
 # POST /notifications/read  – mark notifications as read
 # ---------------------------------------------------------------------------
 @notifications_bp.route("/read", methods=["POST"])
-@login_required
+@token_required
 def mark_read():
     """
     Body: { "ids": [1, 2, 3] }  OR  {} to mark ALL unread as read.
@@ -94,7 +94,7 @@ def mark_read():
 # GET /notifications/count  – unread count badge
 # ---------------------------------------------------------------------------
 @notifications_bp.route("/count", methods=["GET"])
-@login_required
+@token_required
 def unread_count():
     """
     Lightweight endpoint for the notification badge in the UI.

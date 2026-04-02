@@ -23,7 +23,7 @@ from app import cache as app_cache
 # GET /sales  – shopkeeper landing page (HTML)
 # ---------------------------------------------------------------------------
 @sales_bp.route("", methods=["GET"])
-@login_required
+@token_required
 def index():
     """Simple HTML sales dashboard – served once, JS handles the rest."""
     return _sales_html()
@@ -33,7 +33,7 @@ def index():
 # POST /sales  – log a sale (cash or debt)
 # ---------------------------------------------------------------------------
 @sales_bp.route("", methods=["POST"])
-@login_required
+@token_required
 def log_sale():
     """
     POST /sales
@@ -200,7 +200,7 @@ def log_sale():
 # GET /sales/today  – all sales from today
 # ---------------------------------------------------------------------------
 @sales_bp.route("/today", methods=["GET"])
-@login_required
+@token_required
 def today_sales():
     """Returns today's sales joined with product name."""
     from datetime import date

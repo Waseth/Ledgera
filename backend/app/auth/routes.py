@@ -1,11 +1,10 @@
 """
-auth/routes.py – Authentication with JWT
+auth/routes.py – Authentication with JWT (No redirects)
 """
 
 from flask import (
     current_app, request, jsonify
 )
-from flask_login import login_user, logout_user, login_required, current_user
 from werkzeug.security import check_password_hash, generate_password_hash
 import jwt
 from datetime import datetime, timedelta
@@ -64,14 +63,8 @@ def _log_action(user_id, action, details=None):
     db.session.add(log)
 
 
-def _user_dashboard(role):
-    if role == "admin":
-        return "/reports/dashboard-page"
-    return "/sales"
-
-
 # ---------------------------------------------------------------------------
-# Login with JWT
+# Login with JWT (NO REDIRECTS)
 # ---------------------------------------------------------------------------
 @auth_bp.route("/login", methods=["POST"])
 def login():
@@ -107,8 +100,7 @@ def login():
                 "name": admin_user.name,
                 "email": admin_user.email,
                 "role": admin_user.role
-            },
-            "redirect": _user_dashboard(admin_user.role)
+            }
         }), 200
 
     # --- Check shopkeeper ---
@@ -138,8 +130,7 @@ def login():
             "name": row.name,
             "email": email,
             "role": row.role
-        },
-        "redirect": _user_dashboard(row.role)
+        }
     }), 200
 
 
@@ -154,6 +145,7 @@ def verify_token():
 
 
 @auth_bp.route("/logout", methods=["POST"])
+@token_required
 def logout():
     """Logout - client just discards the token."""
     return jsonify({"message": "Logged out successfully"}), 200
@@ -209,6 +201,31 @@ def list_shopkeepers():
          "is_active": r.is_active, "created_at": r.created_at.isoformat()}
         for r in rows
     ]), 200
+
+
+@auth_bp.route("/shopkeepers/<int:user_id>", methods=["DELETE"])
+@token_required
+def delete_shopkeeper(user_id):
+    """Delete a shopkeeper (admin only)."""
+    if request.user_payload.get('role') != "admin":
+        return jsonify({"error": "Forbidden."}), 403
+
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({"error": "Shopkeeper not found."}), 404
+
+    if user.role == "admin":
+        return jsonify({"error": "Cannot delete admin users."}), 400
+
+    if user.sales.count() > 0:
+        return jsonify({"error": "Cannot delete shopkeeper with sales history."}), 400
+
+    _log_action(request.user_payload.get('user_id'), "delete_shopkeeper", f"deleted shopkeeper: {user.email}")
+
+    db.session.delete(user)
+    db.session.commit()
+
+    return jsonify({"message": "Shopkeeper deleted successfully."}), 200
 
 
 # ---------------------------------------------------------------------------

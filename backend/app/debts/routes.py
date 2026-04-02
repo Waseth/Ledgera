@@ -20,7 +20,7 @@ from app.models import Debt, Sale, Product, AuditLog
 # GET /debts  – list unpaid debts (default) or all
 # ---------------------------------------------------------------------------
 @debts_bp.route("", methods=["GET"])
-@login_required
+@token_required
 def list_debts():
     """
     ?paid=1  → include paid debts
@@ -69,7 +69,7 @@ def list_debts():
 # POST /debts/<id>/pay  – mark a debt as paid
 # ---------------------------------------------------------------------------
 @debts_bp.route("/<int:debt_id>/pay", methods=["POST"])
-@login_required
+@token_required
 def mark_paid(debt_id):
     """
     Anti-theft rule: debts can only be marked paid, never deleted.
@@ -105,7 +105,7 @@ def mark_paid(debt_id):
 # GET /debts/summary  – total outstanding debt amount
 # ---------------------------------------------------------------------------
 @debts_bp.route("/summary", methods=["GET"])
-@login_required
+@token_required
 def debt_summary():
     """
     Uses SUM aggregation – only one DB row returned regardless of debt count.

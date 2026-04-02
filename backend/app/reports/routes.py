@@ -74,7 +74,7 @@ def _expenses_total(start: date, end: date):
 # GET /reports/daily  – today or specified date
 # ---------------------------------------------------------------------------
 @reports_bp.route("/daily", methods=["GET"])
-@login_required
+@token_required
 def daily_report():
     start, end = _date_range_from_request()  # same day when start==end
 
@@ -98,7 +98,7 @@ def daily_report():
 # GET /reports/weekly  – last 7 days
 # ---------------------------------------------------------------------------
 @reports_bp.route("/weekly", methods=["GET"])
-@login_required
+@token_required
 def weekly_report():
     today = date.today()
     start = today - timedelta(days=6)  # 7 days inclusive
@@ -148,7 +148,7 @@ def weekly_report():
 # GET /reports/monthly  – current month or ?month=YYYY-MM
 # ---------------------------------------------------------------------------
 @reports_bp.route("/monthly", methods=["GET"])
-@login_required
+@token_required
 def monthly_report():
     month_str = request.args.get("month")
     try:
@@ -218,7 +218,7 @@ def monthly_report():
 # GET /reports/product-performance  – performance for a specific product
 # ---------------------------------------------------------------------------
 @reports_bp.route("/product-performance", methods=["GET"])
-@login_required
+@token_required
 def product_performance():
     """
     Get detailed performance metrics for a specific product.
@@ -319,7 +319,7 @@ def product_performance():
 # GET /reports/top-products  – best selling products
 # ---------------------------------------------------------------------------
 @reports_bp.route("/top-products", methods=["GET"])
-@login_required
+@token_required
 def top_products():
     """
     Get top performing products by quantity sold or revenue.
@@ -382,7 +382,7 @@ def top_products():
 # GET /reports/dashboard  – admin dashboard (all KPIs in one request)
 # ---------------------------------------------------------------------------
 @reports_bp.route("/dashboard", methods=["GET"])
-@login_required
+@token_required
 def dashboard_admin():
     if current_user.role != "admin":
         return jsonify({"error": "Forbidden."}), 403
@@ -433,7 +433,7 @@ def dashboard_admin():
 # GET /reports/notifications  – get notifications for current user
 # ---------------------------------------------------------------------------
 @reports_bp.route("/notifications", methods=["GET"])
-@login_required
+@token_required
 def get_notifications():
     """Get notifications for the current user."""
     from app.models import Notification
@@ -459,7 +459,7 @@ def get_notifications():
 # POST /reports/notifications/<id>/read  – mark notification as read
 # ---------------------------------------------------------------------------
 @reports_bp.route("/notifications/<int:notif_id>/read", methods=["POST"])
-@login_required
+@token_required
 def mark_notification_read(notif_id):
     """Mark a notification as read."""
     from app.models import Notification
@@ -475,7 +475,7 @@ def mark_notification_read(notif_id):
 # POST /reports/notifications/read-all  – mark all as read
 # ---------------------------------------------------------------------------
 @reports_bp.route("/notifications/read-all", methods=["POST"])
-@login_required
+@token_required
 def mark_all_notifications_read():
     """Mark all notifications for current user as read."""
     from app.models import Notification
@@ -495,7 +495,7 @@ def mark_all_notifications_read():
 # ---------------------------------------------------------------------------
 
 @reports_bp.route("/dashboard-page", methods=["GET"])
-@login_required
+@token_required
 def dashboard_page():
     if current_user.role != "admin":
         from flask import redirect, url_for
@@ -504,13 +504,13 @@ def dashboard_page():
 
 
 @reports_bp.route("/weekly-page", methods=["GET"])
-@login_required
+@token_required
 def weekly_page():
     return _simple_report_html("Weekly Report", "weekly"), 200
 
 
 @reports_bp.route("/monthly-page", methods=["GET"])
-@login_required
+@token_required
 def monthly_page():
     return _simple_report_html("Monthly Report", "monthly"), 200
 
