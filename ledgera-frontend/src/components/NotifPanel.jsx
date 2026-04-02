@@ -3,15 +3,18 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { FiBell, FiCheckCircle, FiAlertCircle, FiInfo, FiX } from 'react-icons/fi';
 import { api } from '../api/client';
 import { useToast } from '../context/ToastContext';
+import { useAuth } from '../context/AuthContext';
 
 export default function NotifPanel({ open, onClose, onRead }) {
   const { toast } = useToast();
+  const { user } = useAuth();
   const [notifs, setNotifs] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!open) return;
-    api.get('/reports/notifications')
+    if (!open || !user) return;
+
+    api.get('/reports/notifications', true)
       .then(data => {
         const notifsArray = Array.isArray(data) ? data : [];
         setNotifs(notifsArray);
@@ -21,10 +24,10 @@ export default function NotifPanel({ open, onClose, onRead }) {
         setNotifs([]);
         setLoading(false);
       });
-  }, [open]);
+  }, [open, user]);
 
   const markAll = async () => {
-    await api.post('/reports/notifications/read-all', {}).catch(() => {});
+    await api.post('/reports/notifications/read-all', {}, true).catch(() => {});
     setNotifs([]);
     onRead?.();
     toast('All notifications cleared', 'success');
@@ -96,7 +99,7 @@ export default function NotifPanel({ open, onClose, onRead }) {
               {!loading && notifs.length === 0 && (
                 <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>
                   <FiBell size={40} style={{ marginBottom: '0.5rem', opacity: 0.5 }} />
-                  <p>No notifications</p>
+                  <p style={{ fontFamily: 'Poppins, sans-serif' }}>No notifications</p>
                 </div>
               )}
               {notifs.map((n, i) => (
@@ -116,8 +119,8 @@ export default function NotifPanel({ open, onClose, onRead }) {
                   <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'flex-start' }}>
                     {getIcon(n.category)}
                     <div style={{ flex: 1 }}>
-                      <div style={{ fontSize: '0.85rem', color: 'var(--text-primary)' }}>{n.message}</div>
-                      <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
+                      <div style={{ fontSize: '0.85rem', color: 'var(--text-primary)', fontFamily: 'Poppins, sans-serif' }}>{n.message}</div>
+                      <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '0.25rem', fontFamily: 'Poppins, sans-serif' }}>
                         {new Date(n.created_at).toLocaleString()}
                       </div>
                     </div>
@@ -128,7 +131,7 @@ export default function NotifPanel({ open, onClose, onRead }) {
 
             {notifs.length > 0 && (
               <div style={{ padding: '1rem', borderTop: '1px solid var(--border-medium)' }}>
-                <button className="btn btn-outline btn-sm" onClick={markAll} style={{ width: '100%' }}>
+                <button className="btn btn-outline btn-sm" onClick={markAll} style={{ width: '100%', fontFamily: 'Poppins, sans-serif' }}>
                   Clear All
                 </button>
               </div>

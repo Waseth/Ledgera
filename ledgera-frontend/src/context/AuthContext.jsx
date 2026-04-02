@@ -10,29 +10,27 @@ export function AuthProvider({ children }) {
   });
   const [loading, setLoading] = useState(true);
 
-  // Verify token on mount
   useEffect(() => {
+    // Just check if token exists, don't make unnecessary API calls
     const token = localStorage.getItem('auth_token');
-    if (token) {
-      api.get('/auth/verify', true)
-        .then(() => {
-          // Token is valid, user already set from localStorage
-          setLoading(false);
-        })
-        .catch(() => {
-          // Token invalid
-          api.logout();
-          setUser(null);
-          setLoading(false);
-        });
+    if (token && user) {
+      setLoading(false);
+    } else if (!token) {
+      setUser(null);
+      setLoading(false);
     } else {
       setLoading(false);
     }
-  }, []);
+  }, [user]);
 
   const login = useCallback(async (email, password) => {
     const data = await api.login(email, password);
-    const userObj = { role: data.user.role, email: data.user.email, name: data.user.name };
+    const userObj = {
+      role: data.user.role,
+      email: data.user.email,
+      name: data.user.name,
+      id: data.user.id
+    };
     setUser(userObj);
     return data.user.role;
   }, []);

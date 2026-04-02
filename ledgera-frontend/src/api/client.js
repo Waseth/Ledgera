@@ -21,6 +21,11 @@ function getCurrentUser() {
 }
 
 async function request(method, path, body, requiresAuth = true) {
+  // Don't make authenticated requests if no token and requiresAuth is true
+  if (requiresAuth && !authToken) {
+    throw new Error('No authentication token');
+  }
+
   const headers = {
     'Content-Type': 'application/json',
   };
@@ -40,14 +45,14 @@ async function request(method, path, body, requiresAuth = true) {
 
   try {
     const res = await fetch(`${BASE}${path}`, opts);
-    const data = await res.json().catch(() => ({}));
 
-    // Handle token expiry
+    // Handle token expiry - don't redirect, just throw error
     if (res.status === 401) {
       setAuthToken(null, null);
-      window.location.href = '/login';
       throw new Error('Session expired. Please login again.');
     }
+
+    const data = await res.json().catch(() => ({}));
 
     if (!res.ok) {
       const msg = data.error || (data.errors && data.errors.join(' ')) || `HTTP ${res.status}`;

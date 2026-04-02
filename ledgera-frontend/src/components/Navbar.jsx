@@ -20,13 +20,21 @@ export default function Navbar() {
   const [notifOpen, setNotifOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const [logoutConfirm, setLogoutConfirm] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
 
+  // Only fetch notifications if user is authenticated
   useEffect(() => {
-    api.get('/reports/notifications').then(data => {
-      const unread = Array.isArray(data) ? data.filter(n => !n.is_read).length : 0;
-      setUnreadCount(unread);
-    }).catch(() => {});
-  }, []);
+    if (user) {
+      api.get('/reports/notifications', true)
+        .then(data => {
+          const unread = Array.isArray(data) ? data.filter(n => !n.is_read).length : 0;
+          setUnreadCount(unread);
+        })
+        .catch((err) => {
+          console.error('Failed to fetch notifications:', err.message);
+        });
+    }
+  }, [user]);
 
   const handleLogout = async () => {
     if (!logoutConfirm) { setLogoutConfirm(true); return; }
@@ -50,7 +58,39 @@ export default function Navbar() {
         { to: '/reports', label: 'Reports', icon: FiPieChart },
       ];
 
-  // Bottom Navigation (Mobile only)
+  const DesktopNav = () => (
+    <div className="desktop-nav" style={{
+      display: 'flex',
+      alignItems: 'center',
+      gap: '0.25rem',
+      flex: 1,
+    }}>
+      {navLinks.map(link => (
+        <NavLink
+          key={link.to}
+          to={link.to}
+          style={({ isActive }) => ({
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.5rem',
+            padding: '0.5rem 1rem',
+            borderRadius: 'var(--radius-md)',
+            color: isActive ? 'var(--nav-accent)' : 'var(--nav-muted)',
+            background: isActive ? 'var(--primary-blue-dim)' : 'transparent',
+            textDecoration: 'none',
+            fontFamily: 'Poppins, sans-serif',
+            fontWeight: 500,
+            fontSize: '0.85rem',
+            transition: 'all var(--transition)',
+          })}
+        >
+          <link.icon size={18} />
+          <span>{link.label}</span>
+        </NavLink>
+      ))}
+    </div>
+  );
+
   const BottomNav = () => (
     <div className="bottom-nav">
       {navLinks.map(link => (
@@ -58,6 +98,7 @@ export default function Navbar() {
           key={link.to}
           to={link.to}
           className={({ isActive }) => `bottom-nav-item ${isActive ? 'active' : ''}`}
+          onClick={() => setMenuOpen(false)}
         >
           <link.icon size={20} />
           <span style={{ fontFamily: 'Poppins, sans-serif', fontSize: '0.7rem' }}>{link.label}</span>
@@ -68,7 +109,6 @@ export default function Navbar() {
 
   return (
     <>
-      {/* Top Navigation Bar */}
       <nav style={{
         background: 'var(--nav-bg)',
         color: 'var(--nav-text)',
@@ -87,7 +127,6 @@ export default function Navbar() {
           justifyContent: 'space-between',
           gap: '1.5rem',
         }}>
-          {/* Logo - visible on all screens */}
           <span style={{
             fontFamily: 'Poppins, sans-serif',
             fontWeight: 800,
@@ -98,41 +137,9 @@ export default function Navbar() {
             Ledgera
           </span>
 
-          {/* Desktop Navigation - hidden on mobile */}
-          <div className="desktop-nav" style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '0.25rem',
-            flex: 1,
-          }}>
-            {navLinks.map(link => (
-              <NavLink
-                key={link.to}
-                to={link.to}
-                style={({ isActive }) => ({
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.5rem',
-                  padding: '0.5rem 1rem',
-                  borderRadius: 'var(--radius-md)',
-                  color: isActive ? 'var(--nav-accent)' : 'var(--nav-muted)',
-                  background: isActive ? 'var(--primary-blue-dim)' : 'transparent',
-                  textDecoration: 'none',
-                  fontFamily: 'Poppins, sans-serif',
-                  fontWeight: 500,
-                  fontSize: '0.85rem',
-                  transition: 'all var(--transition)',
-                })}
-              >
-                <link.icon size={18} />
-                <span>{link.label}</span>
-              </NavLink>
-            ))}
-          </div>
+          <DesktopNav />
 
-          {/* Right side icons - always at top */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexShrink: 0 }}>
-            {/* Theme Toggle */}
             <button
               onClick={toggle}
               style={{
@@ -151,7 +158,6 @@ export default function Navbar() {
               {isDark ? <FiSun size={18} /> : <FiMoon size={18} />}
             </button>
 
-            {/* Notifications */}
             <button
               onClick={() => setNotifOpen(true)}
               style={{
@@ -187,7 +193,6 @@ export default function Navbar() {
               )}
             </button>
 
-            {/* Logout Button */}
             <button
               onClick={handleLogout}
               style={{
@@ -210,29 +215,23 @@ export default function Navbar() {
         </div>
       </nav>
 
-      {/* Bottom Navigation - Mobile only */}
       <BottomNav />
-
-      {/* Notification Panel */}
       <NotifPanel open={notifOpen} onClose={() => setNotifOpen(false)} onRead={() => setUnreadCount(0)} />
 
-      {/* CSS for responsive behavior */}
       <style>{`
-        /* Hide desktop nav on mobile */
         @media (max-width: 768px) {
           .desktop-nav {
             display: none !important;
           }
+          .bottom-nav {
+            display: flex !important;
+          }
         }
-
-        /* Hide bottom nav on desktop */
         @media (min-width: 769px) {
           .bottom-nav {
             display: none !important;
           }
         }
-
-        /* Bottom navigation styling */
         .bottom-nav {
           position: fixed;
           bottom: 0;
@@ -241,12 +240,11 @@ export default function Navbar() {
           background: var(--nav-bg);
           border-top: 1px solid var(--border-medium);
           box-shadow: var(--nav-shadow);
-          display: flex;
+          display: none;
           justify-content: space-around;
           z-index: 100;
           padding: 0.5rem 1rem;
         }
-
         .bottom-nav-item {
           display: flex;
           flex-direction: column;
@@ -263,17 +261,13 @@ export default function Navbar() {
           flex: 1;
           text-align: center;
         }
-
         .bottom-nav-item.active {
           color: var(--nav-accent);
           background: var(--primary-blue-dim);
         }
-
         .bottom-nav-item svg {
           font-size: 1.25rem;
         }
-
-        /* Add padding to page content to account for bottom nav on mobile */
         @media (max-width: 768px) {
           .page-wrapper {
             padding-bottom: 80px;

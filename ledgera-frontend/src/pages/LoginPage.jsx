@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
+import { FiMail, FiLock, FiLogIn } from 'react-icons/fi';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 
@@ -9,10 +10,10 @@ export default function LoginPage() {
   const { toast } = useToast();
   const navigate = useNavigate();
 
-  const [email,    setEmail]    = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [loading,  setLoading]  = useState(false);
-  const [error,    setError]    = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -57,7 +58,7 @@ export default function LoginPage() {
           style={{ textAlign: 'center', marginBottom: '2rem' }}
         >
           <div style={{
-            fontFamily: "'Barlow Condensed', sans-serif",
+            fontFamily: 'Poppins, sans-serif',
             fontWeight: 800,
             fontSize: '3rem',
             letterSpacing: '0.1em',
@@ -68,7 +69,7 @@ export default function LoginPage() {
             Ledgera
           </div>
           <div style={{
-            fontFamily: "'Barlow Condensed', sans-serif",
+            fontFamily: 'Poppins, sans-serif',
             fontWeight: 600,
             fontSize: '0.78rem',
             letterSpacing: '0.18em',
@@ -101,7 +102,7 @@ export default function LoginPage() {
 
           <div style={{ marginBottom: '1.5rem' }}>
             <div style={{
-              fontFamily: "'Barlow Condensed', sans-serif",
+              fontFamily: 'Poppins, sans-serif',
               fontWeight: 800,
               fontSize: '1.3rem',
               letterSpacing: '0.04em',
@@ -110,34 +111,42 @@ export default function LoginPage() {
             }}>
               Sign In
             </div>
-            <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
+            <div style={{ fontFamily: 'Poppins, sans-serif', fontSize: '0.82rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
               Enter your credentials to continue
             </div>
           </div>
 
           <form onSubmit={handleSubmit}>
             <div className="form-group">
-              <label className="form-label">Email Address</label>
-              <input
-                className="form-input"
-                type="email"
-                value={email}
-                onChange={e => setEmail(e.target.value)}
-                placeholder="you@example.com"
-                autoFocus
-                autoComplete="email"
-              />
+              <label className="form-label" style={{ fontFamily: 'Poppins, sans-serif' }}>Email Address</label>
+              <div style={{ position: 'relative' }}>
+                <FiMail style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} size={16} />
+                <input
+                  className="form-input"
+                  type="email"
+                  value={email}
+                  onChange={e => setEmail(e.target.value)}
+                  placeholder="you@example.com"
+                  autoFocus
+                  autoComplete="email"
+                  style={{ paddingLeft: '2.5rem', fontFamily: 'Poppins, sans-serif' }}
+                />
+              </div>
             </div>
             <div className="form-group">
-              <label className="form-label">Password</label>
-              <input
-                className="form-input"
-                type="password"
-                value={password}
-                onChange={e => setPassword(e.target.value)}
-                placeholder="••••••••"
-                autoComplete="current-password"
-              />
+              <label className="form-label" style={{ fontFamily: 'Poppins, sans-serif' }}>Password</label>
+              <div style={{ position: 'relative' }}>
+                <FiLock style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} size={16} />
+                <input
+                  className="form-input"
+                  type="password"
+                  value={password}
+                  onChange={e => setPassword(e.target.value)}
+                  placeholder="••••••••"
+                  autoComplete="current-password"
+                  style={{ paddingLeft: '2.5rem', fontFamily: 'Poppins, sans-serif' }}
+                />
+              </div>
             </div>
 
             {error && (
@@ -152,6 +161,7 @@ export default function LoginPage() {
                   fontSize: '0.85rem',
                   color: 'var(--accent-red)',
                   marginBottom: '1rem',
+                  fontFamily: 'Poppins, sans-serif',
                 }}
               >
                 {error}
@@ -161,7 +171,17 @@ export default function LoginPage() {
             <button
               type="submit"
               className="btn btn-primary"
-              style={{ width: '100%', marginTop: '0.25rem', padding: '0.75rem' }}
+              style={{
+                width: '100%',
+                marginTop: '0.25rem',
+                padding: '0.75rem',
+                fontFamily: 'Poppins, sans-serif',
+                color: '#0F172A',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '0.5rem'
+              }}
               disabled={loading}
             >
               {loading ? (
@@ -169,9 +189,13 @@ export default function LoginPage() {
                   animate={{ opacity: [1, 0.4, 1] }}
                   transition={{ duration: 1, repeat: Infinity }}
                 >
-                  Signing in…
+                  Signing in...
                 </motion.span>
-              ) : 'Sign In'}
+              ) : (
+                <>
+                  <FiLogIn size={16} /> Sign In
+                </>
+              )}
             </button>
           </form>
         </motion.div>
@@ -186,7 +210,7 @@ export default function LoginPage() {
             marginTop: '1.5rem',
             fontSize: '0.75rem',
             color: 'var(--text-muted)',
-            fontFamily: "'Barlow Condensed', sans-serif",
+            fontFamily: 'Poppins, sans-serif',
             letterSpacing: '0.08em',
             textTransform: 'uppercase',
           }}
