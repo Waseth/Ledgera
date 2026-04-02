@@ -1,32 +1,23 @@
-from app.auth.routes import token_required
 """
 notifications/routes.py – Notification fetch and mark-read.
-
-OPTIMIZATIONS:
-- Only unread notifications fetched by default (index on user_id + is_read).
-- LIMIT 20 – no unbounded queries.
-- Mark-read uses bulk UPDATE, not per-row updates.
 """
 
 from flask import request, jsonify
-from flask_login import login_required, current_user
+from sqlalchemy import func, or_
 
 from app.notifications import notifications_bp
 from app.extensions import db
 from app.models import Notification
+from app.auth.routes import token_required
 
 
 # ---------------------------------------------------------------------------
-# GET /notifications  – fetch latest unread (or all)
+# GET /notifications
 # ---------------------------------------------------------------------------
 @notifications_bp.route("", methods=["GET"])
 @token_required
 def list_notifications():
-    """
-    Returns latest 20 unread notifications for this user OR broadcast
-    notifications (user_id IS NULL).
-    ?all=1 includes read notifications.
-    """
+    user_id = request.user_payload.get('user_id') if hasattr(request, 'user_payload') else None
     include_read = request.args.get("all", "0") == "1"
 
     query = db.session.query(
@@ -36,15 +27,14 @@ def list_notifications():
         Notification.is_read,
         Notification.created_at,
     ).filter(
-        # User-specific OR broadcast
-        db.or_(
-            Notification.user_id == current_user.id,
-            Notification.user_id == None,  # noqa: E711
+        or_(
+            Notification.user_id == user_id,
+            Notification.user_id == None,
         )
     )
 
     if not include_read:
-        query = query.filter(Notification.is_read == False)  # noqa: E712
+        query = query.filter(Notification.is_read == False)
 
     rows = query.order_by(Notification.created_at.desc()).limit(20).all()
 
@@ -61,25 +51,21 @@ def list_notifications():
 
 
 # ---------------------------------------------------------------------------
-# POST /notifications/read  – mark notifications as read
+# POST /notifications/read
 # ---------------------------------------------------------------------------
 @notifications_bp.route("/read", methods=["POST"])
 @token_required
 def mark_read():
-    """
-    Body: { "ids": [1, 2, 3] }  OR  {} to mark ALL unread as read.
-    Uses bulk UPDATE – one DB round-trip regardless of count.
-    WHY: avoids loading each notification object and updating one by one.
-    """
+    user_id = request.user_payload.get('user_id') if hasattr(request, 'user_payload') else None
     data = request.get_json(silent=True) or {}
-    ids = data.get("ids")  # None means "mark all"
+    ids = data.get("ids")
 
     query = db.session.query(Notification).filter(
-        db.or_(
-            Notification.user_id == current_user.id,
-            Notification.user_id == None,  # noqa: E711
+        or_(
+            Notification.user_id == user_id,
+            Notification.user_id == None,
         ),
-        Notification.is_read == False,  # noqa: E712
+        Notification.is_read == False,
     )
 
     if ids and isinstance(ids, list):
@@ -92,22 +78,19 @@ def mark_read():
 
 
 # ---------------------------------------------------------------------------
-# GET /notifications/count  – unread count badge
+# GET /notifications/count
 # ---------------------------------------------------------------------------
 @notifications_bp.route("/count", methods=["GET"])
 @token_required
 def unread_count():
-    """
-    Lightweight endpoint for the notification badge in the UI.
-    Returns a single integer – very fast query.
-    """
-    from sqlalchemy import func
+    user_id = request.user_payload.get('user_id') if hasattr(request, 'user_payload') else None
+
     count = db.session.query(func.count(Notification.id)).filter(
-        db.or_(
-            Notification.user_id == current_user.id,
-            Notification.user_id == None,  # noqa: E711
+        or_(
+            Notification.user_id == user_id,
+            Notification.user_id == None,
         ),
-        Notification.is_read == False,  # noqa: E712
-    ).scalar()
+        Notification.is_read == False,
+    ).scalar() or 0
 
     return jsonify({"unread": count}), 200

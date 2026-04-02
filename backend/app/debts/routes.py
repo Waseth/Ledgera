@@ -1,4 +1,3 @@
-from app.auth.routes import token_required
 """
 debts/routes.py – Debt tracking.
 
@@ -10,11 +9,11 @@ OPTIMIZATIONS:
 
 from datetime import datetime
 from flask import request, jsonify
-from flask_login import login_required, current_user
 
 from app.debts import debts_bp
 from app.extensions import db
 from app.models import Debt, Sale, Product, AuditLog
+from app.auth.routes import token_required
 
 
 # ---------------------------------------------------------------------------
@@ -46,7 +45,7 @@ def list_debts():
     )
 
     if not include_paid:
-        query = query.filter(Debt.is_paid == False)  # noqa: E712
+        query = query.filter(Debt.is_paid == False)
 
     rows = query.order_by(Debt.created_at.desc()).limit(200).all()
 
@@ -77,10 +76,13 @@ def mark_paid(debt_id):
     Uses targeted UPDATE to avoid loading the full ORM object.
     """
     # --- ROLE CHECK: Only shopkeepers can collect payments ---
-    if current_user.role != 'shopkeeper':
+    user_role = request.user_payload.get('role') if hasattr(request, 'user_payload') else None
+    user_id = request.user_payload.get('user_id') if hasattr(request, 'user_payload') else None
+
+    if user_role != 'shopkeeper':
         return jsonify({"error": "Only shopkeepers can collect payments"}), 403
 
-    # Verify debt exists and is unpaid (fetch only id + is_paid)
+    # Verify debt exists and is unpaid
     row = db.session.query(Debt.id, Debt.is_paid).filter(Debt.id == debt_id).first()
     if not row:
         return jsonify({"error": "Debt not found."}), 404
@@ -93,7 +95,7 @@ def mark_paid(debt_id):
         synchronize_session=False,
     )
     db.session.add(AuditLog(
-        user_id=current_user.id,
+        user_id=user_id,
         action="mark_debt_paid",
         details=f"debt_id={debt_id}",
     ))
@@ -110,16 +112,15 @@ def mark_paid(debt_id):
 def debt_summary():
     """
     Uses SUM aggregation – only one DB row returned regardless of debt count.
-    WHY: avoids loading all debt rows into Python memory just to sum them.
     """
     from sqlalchemy import func
     total = db.session.query(
         func.sum(Debt.amount)
-    ).filter(Debt.is_paid == False).scalar() or 0.0  # noqa: E712
+    ).filter(Debt.is_paid == False).scalar() or 0.0
 
     count = db.session.query(
         func.count(Debt.id)
-    ).filter(Debt.is_paid == False).scalar() or 0  # noqa: E712
+    ).filter(Debt.is_paid == False).scalar() or 0
 
     return jsonify({
         "outstanding_amount": round(total, 2),

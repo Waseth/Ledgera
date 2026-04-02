@@ -1,23 +1,16 @@
-from app.auth.routes import token_required
 """
 reports/routes.py – Daily, weekly, monthly reports + admin dashboard.
-
-OPTIMIZATIONS:
-- All totals use SQL SUM/COUNT aggregations, never Python loops.
-- Date filtering uses indexed columns (timestamp).
-- Dashboard returns all KPIs in ONE request (no multiple round trips).
-- LIMIT applied on itemized queries.
 """
 
 from datetime import date, datetime, timedelta
 from flask import jsonify, request
-from flask_login import login_required, current_user
 from sqlalchemy import func
 
 from app.reports import reports_bp
 from app.extensions import db
-from app.models import Sale, Expense, Debt, Product
+from app.models import Sale, Expense, Debt, Product, Notification
 from app.reports.dashboard_html import ADMIN_DASHBOARD_HTML
+from app.auth.routes import token_required
 
 
 # ---------------------------------------------------------------------------
@@ -36,10 +29,7 @@ def _date_range_from_request():
 
 
 def _sales_aggregates(start: date, end: date):
-    """
-    Returns (total_revenue, total_profit, cash_revenue, debt_revenue, sale_count)
-    for the given date range using a SINGLE query.
-    """
+    """Returns aggregates for the given date range."""
     result = db.session.query(
         func.coalesce(func.sum(Sale.total_price), 0.0).label("revenue"),
         func.coalesce(func.sum(Sale.profit), 0.0).label("profit"),
@@ -58,7 +48,6 @@ def _sales_aggregates(start: date, end: date):
         db.func.date(Sale.timestamp) >= start,
         db.func.date(Sale.timestamp) <= end
     ).first()
-
     return result
 
 
@@ -72,13 +61,12 @@ def _expenses_total(start: date, end: date):
 
 
 # ---------------------------------------------------------------------------
-# GET /reports/daily  – today or specified date
+# GET /reports/daily
 # ---------------------------------------------------------------------------
 @reports_bp.route("/daily", methods=["GET"])
 @token_required
 def daily_report():
-    start, end = _date_range_from_request()  # same day when start==end
-
+    start, end = _date_range_from_request()
     agg = _sales_aggregates(start, start)
     expenses = _expenses_total(start, start)
     net_profit = round(agg.profit - expenses, 2)
@@ -96,19 +84,18 @@ def daily_report():
 
 
 # ---------------------------------------------------------------------------
-# GET /reports/weekly  – last 7 days
+# GET /reports/weekly
 # ---------------------------------------------------------------------------
 @reports_bp.route("/weekly", methods=["GET"])
 @token_required
 def weekly_report():
     today = date.today()
-    start = today - timedelta(days=6)  # 7 days inclusive
+    start = today - timedelta(days=6)
 
     agg = _sales_aggregates(start, today)
     expenses = _expenses_total(start, today)
     net_profit = round(agg.profit - expenses, 2)
 
-    # Per-day breakdown using GROUP BY on timestamp
     daily_rows = (
         db.session.query(
             func.date(Sale.timestamp).label("date"),
@@ -146,7 +133,7 @@ def weekly_report():
 
 
 # ---------------------------------------------------------------------------
-# GET /reports/monthly  – current month or ?month=YYYY-MM
+# GET /reports/monthly
 # ---------------------------------------------------------------------------
 @reports_bp.route("/monthly", methods=["GET"])
 @token_required
@@ -159,7 +146,6 @@ def monthly_report():
             today = date.today()
             year, mon = today.year, today.month
         start = date(year, mon, 1)
-        # Last day of month
         if mon == 12:
             end = date(year + 1, 1, 1) - timedelta(days=1)
         else:
@@ -173,7 +159,6 @@ def monthly_report():
     expenses = _expenses_total(start, end)
     net_profit = round(agg.profit - expenses, 2)
 
-    # Top 5 products by revenue
     top_products = (
         db.session.query(
             Product.name,
@@ -216,31 +201,21 @@ def monthly_report():
 
 
 # ---------------------------------------------------------------------------
-# GET /reports/product-performance  – performance for a specific product
+# GET /reports/product-performance
 # ---------------------------------------------------------------------------
 @reports_bp.route("/product-performance", methods=["GET"])
 @token_required
 def product_performance():
-    """
-    Get detailed performance metrics for a specific product.
-    Query params:
-        product_id: integer (required)
-        days: integer (optional, default 30) - number of days of history
-    """
     product_id = request.args.get("product_id", type=int)
     days = request.args.get("days", 30, type=int)
 
     if not product_id:
         return jsonify({"error": "product_id parameter is required"}), 400
 
-    # Get product details
     product = Product.query.get_or_404(product_id)
-
-    # Date range (last X days or all time)
     end_date = date.today()
     start_date = end_date - timedelta(days=days)
 
-    # Get sales for this product
     sales_data = db.session.query(
         func.coalesce(func.sum(Sale.quantity_sold), 0).label("total_quantity"),
         func.coalesce(func.sum(Sale.total_price), 0).label("total_revenue"),
@@ -251,7 +226,6 @@ def product_performance():
         db.func.date(Sale.timestamp) >= start_date
     ).first()
 
-    # Get daily breakdown for chart display
     daily_breakdown = db.session.query(
         db.func.date(Sale.timestamp).label("date"),
         func.coalesce(func.sum(Sale.quantity_sold), 0).label("quantity"),
@@ -262,7 +236,6 @@ def product_performance():
         db.func.date(Sale.timestamp) >= start_date
     ).group_by(db.func.date(Sale.timestamp)).order_by(db.func.date(Sale.timestamp)).all()
 
-    # Get payment type breakdown
     payment_breakdown = db.session.query(
         Sale.payment_type,
         func.count(Sale.id).label("count"),
@@ -317,26 +290,17 @@ def product_performance():
 
 
 # ---------------------------------------------------------------------------
-# GET /reports/top-products  – best selling products
+# GET /reports/top-products
 # ---------------------------------------------------------------------------
 @reports_bp.route("/top-products", methods=["GET"])
 @token_required
 def top_products():
-    """
-    Get top performing products by quantity sold or revenue.
-    Query params:
-        sort_by: "quantity" or "revenue" (default: "quantity")
-        limit: integer (default: 10)
-        days: integer (optional) - number of days to consider
-    """
     sort_by = request.args.get("sort_by", "quantity")
     limit = request.args.get("limit", 10, type=int)
     days = request.args.get("days", type=int)
 
-    # Date filter
     start_date = date.today() - timedelta(days=days) if days else None
 
-    # Build query
     query = db.session.query(
         Product.id,
         Product.name,
@@ -352,7 +316,6 @@ def top_products():
 
     query = query.group_by(Product.id, Product.name, Product.selling_price)
 
-    # Order by
     if sort_by == "revenue":
         query = query.order_by(func.sum(Sale.total_price).desc())
     else:
@@ -380,34 +343,33 @@ def top_products():
 
 
 # ---------------------------------------------------------------------------
-# GET /reports/dashboard  – admin dashboard (all KPIs in one request)
+# GET /reports/dashboard
 # ---------------------------------------------------------------------------
 @reports_bp.route("/dashboard", methods=["GET"])
 @token_required
 def dashboard_admin():
-    if current_user.role != "admin":
+    user_role = request.user_payload.get('role') if hasattr(request, 'user_payload') else None
+
+    if user_role != "admin":
         return jsonify({"error": "Forbidden."}), 403
 
     today = date.today()
     week_start = today - timedelta(days=6)
 
-    # All aggregations fire as independent queries but are minimal
     today_agg = _sales_aggregates(today, today)
     week_agg = _sales_aggregates(week_start, today)
     today_exp = _expenses_total(today, today)
     week_exp = _expenses_total(week_start, today)
 
-    # Outstanding debt
     debt_total = db.session.query(
         func.coalesce(func.sum(Debt.amount), 0.0)
-    ).filter(Debt.is_paid == False).scalar()  # noqa: E712
+    ).filter(Debt.is_paid == False).scalar() or 0.0
 
-    # Low-stock count
     from flask import current_app
     threshold = current_app.config.get("LOW_STOCK_THRESHOLD", 5)
     low_stock_count = db.session.query(
         func.count(Product.id)
-    ).filter(Product.quantity <= threshold).scalar()
+    ).filter(Product.quantity <= threshold).scalar() or 0
 
     return jsonify({
         "today": {
@@ -431,16 +393,15 @@ def dashboard_admin():
 
 
 # ---------------------------------------------------------------------------
-# GET /reports/notifications  – get notifications for current user
+# GET /reports/notifications
 # ---------------------------------------------------------------------------
 @reports_bp.route("/notifications", methods=["GET"])
 @token_required
 def get_notifications():
-    """Get notifications for the current user."""
-    from app.models import Notification
+    user_id = request.user_payload.get('user_id') if hasattr(request, 'user_payload') else None
 
     notifications = Notification.query.filter(
-        (Notification.user_id == current_user.id) |
+        (Notification.user_id == user_id) |
         (Notification.user_id == None)
     ).order_by(Notification.created_at.desc()).limit(50).all()
 
@@ -457,50 +418,43 @@ def get_notifications():
 
 
 # ---------------------------------------------------------------------------
-# POST /reports/notifications/<id>/read  – mark notification as read
+# POST /reports/notifications/<id>/read
 # ---------------------------------------------------------------------------
 @reports_bp.route("/notifications/<int:notif_id>/read", methods=["POST"])
 @token_required
 def mark_notification_read(notif_id):
-    """Mark a notification as read."""
-    from app.models import Notification
-
     notif = Notification.query.get_or_404(notif_id)
     notif.is_read = True
     db.session.commit()
-
     return jsonify({"message": "Notification marked as read"}), 200
 
 
 # ---------------------------------------------------------------------------
-# POST /reports/notifications/read-all  – mark all as read
+# POST /reports/notifications/read-all
 # ---------------------------------------------------------------------------
 @reports_bp.route("/notifications/read-all", methods=["POST"])
 @token_required
 def mark_all_notifications_read():
-    """Mark all notifications for current user as read."""
-    from app.models import Notification
+    user_id = request.user_payload.get('user_id') if hasattr(request, 'user_payload') else None
 
     Notification.query.filter(
-        (Notification.user_id == current_user.id) |
+        (Notification.user_id == user_id) |
         (Notification.user_id == None)
     ).update({"is_read": True}, synchronize_session=False)
-
     db.session.commit()
-
     return jsonify({"message": "All notifications marked as read"}), 200
 
 
 # ---------------------------------------------------------------------------
-# HTML page routes (served once; JS fetches data via JSON endpoints)
+# HTML page routes
 # ---------------------------------------------------------------------------
 
 @reports_bp.route("/dashboard-page", methods=["GET"])
 @token_required
 def dashboard_page():
-    if current_user.role != "admin":
-        from flask import redirect, url_for
-        return redirect(url_for("sales.index"))
+    user_role = request.user_payload.get('role') if hasattr(request, 'user_payload') else None
+    if user_role != "admin":
+        return {"error": "Forbidden"}, 403
     return ADMIN_DASHBOARD_HTML, 200
 
 
@@ -565,7 +519,7 @@ def _simple_report_html(title, endpoint):
       html += `<div class="kpi"><h4>Sales Count</h4><p>${{d.sale_count}}</p></div>`;
       html += '</div></div>';
       if (d.daily_breakdown) {{
-        html += '<div class="card"><h3 style="margin-bottom:.75rem">Daily Breakdown</h3><table><thead><tr><th>Date</th><th>Revenue</th><th>Profit</th><th>Sales</th></tr></thead><tbody>';
+        html += '<div class="card"><h3 style="margin-bottom:.75rem">Daily Breakdown</h3><table><thead><tr><th>Date</th><th>Revenue</th><th>Profit</th><th>Sales</th><tr></thead><tbody>';
         d.daily_breakdown.forEach(r => {{
           html += `<tr><td>${{r.date}}</td><td>KSh ${{fmt(r.revenue)}}</td><td>KSh ${{fmt(r.profit)}}</td><td>${{r.sale_count}}</td></tr>`;
         }});

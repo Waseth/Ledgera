@@ -1,4 +1,3 @@
-from app.auth.routes import token_required
 """
 sales/routes.py – Sales logging (cash or debt).
 
@@ -12,12 +11,11 @@ OPTIMIZATIONS:
 """
 
 from flask import request, jsonify, current_app
-from flask_login import login_required, current_user
-
 from app.sales import sales_bp
 from app.extensions import db
 from app.models import Product, Sale, Debt, AuditLog, Notification, User
 from app import cache as app_cache
+from app.auth.routes import token_required
 
 
 # ---------------------------------------------------------------------------
@@ -45,17 +43,12 @@ def log_sale():
       "customer_name": str,   # required if debt
       "customer_phone": str,  # required if debt
     }
-
-    All DB writes happen in ONE transaction:
-      1. Validate stock
-      2. Reduce product.quantity (UPDATE, no ORM load)
-      3. Insert Sale row
-      4. Insert Debt row (if debt)
-      5. Insert AuditLog row
-      6. Insert low-stock Notification (if needed)
     """
     # --- ROLE CHECK: Only shopkeepers can record sales ---
-    if current_user.role != 'shopkeeper':
+    user_role = request.user_payload.get('role') if hasattr(request, 'user_payload') else None
+    user_id = request.user_payload.get('user_id') if hasattr(request, 'user_payload') else None
+
+    if user_role != 'shopkeeper':
         return jsonify({"error": "Only shopkeepers can record sales"}), 403
 
     data = request.get_json(silent=True) or {}
@@ -114,16 +107,16 @@ def log_sale():
 
     # --- Single transaction: all writes together ---
     try:
-        # 1. Reduce stock (raw UPDATE – fastest possible)
+        # 1. Reduce stock
         db.session.query(Product).filter(Product.id == product_id).update(
             {"quantity": product_row.quantity - quantity_sold},
             synchronize_session=False,
         )
 
-        # 2. Insert sale (no day_id anymore)
+        # 2. Insert sale
         sale = Sale(
             product_id=product_id,
-            user_id=current_user.id,
+            user_id=user_id,
             quantity_sold=quantity_sold,
             unit_price=product_row.selling_price,
             buying_price_at_sale=product_row.buying_price,
@@ -132,7 +125,7 @@ def log_sale():
             payment_type=payment_type,
         )
         db.session.add(sale)
-        db.session.flush()  # populate sale.id for debt FK
+        db.session.flush()
 
         # 3. Insert debt record (if needed)
         if payment_type == "debt":
@@ -146,12 +139,12 @@ def log_sale():
 
         # 4. Audit log
         db.session.add(AuditLog(
-            user_id=current_user.id,
+            user_id=user_id,
             action="log_sale",
             details=f"sale_id={sale.id} product_id={product_id} qty={quantity_sold} type={payment_type}",
         ))
 
-        # 5. Low-stock notification (send to all admins)
+        # 5. Low-stock notification
         new_qty = product_row.quantity - quantity_sold
         threshold = current_app.config.get("LOW_STOCK_THRESHOLD", 5)
         if new_qty <= threshold:
@@ -170,7 +163,6 @@ def log_sale():
                     message=message,
                     category="warning",
                 ))
-            # Also add system-wide notification
             db.session.add(Notification(
                 user_id=None,
                 message=f"⚠️ Low stock: {product_name} has only {new_qty} units left!",
@@ -184,7 +176,6 @@ def log_sale():
         current_app.logger.exception("Sale transaction failed")
         return jsonify({"error": "Sale could not be recorded. Please retry."}), 500
 
-    # Invalidate caches after successful commit
     app_cache.invalidate_products()
     app_cache.invalidate_low_stock()
 
@@ -241,7 +232,7 @@ def today_sales():
 
 
 # ---------------------------------------------------------------------------
-# Minimal HTML sales page (same as before)
+# Minimal HTML sales page
 # ---------------------------------------------------------------------------
 def _sales_html():
     return """<!DOCTYPE html>

@@ -1,4 +1,3 @@
-from app.auth.routes import token_required
 """
 products/routes.py – Stock management.
 
@@ -11,12 +10,12 @@ OPTIMIZATIONS:
 """
 
 from flask import request, jsonify
-from flask_login import login_required, current_user
 
 from app.products import products_bp
 from app.extensions import db
 from app.models import Product, AuditLog
 from app import cache as app_cache
+from app.auth.routes import token_required
 
 
 # ---------------------------------------------------------------------------
@@ -27,8 +26,6 @@ from app import cache as app_cache
 def list_products():
     """
     Returns cached product list.
-    WHY cache: product data changes rarely; reading from memory is ~1000×
-    faster than a DB query.
     """
     rows = app_cache.get_cached_products()
     return jsonify([
@@ -77,12 +74,12 @@ def add_or_restock():
     """
     If a product with the same name exists → increase quantity (restock).
     Otherwise → create new product.
-
-    WHY combined endpoint: avoids a separate "check-then-create" round-trip
-    from the frontend; one request handles both cases.
     """
     # --- ROLE CHECK: Only admin can add or restock products ---
-    if current_user.role != 'admin':
+    user_role = request.user_payload.get('role') if hasattr(request, 'user_payload') else None
+    user_id = request.user_payload.get('user_id') if hasattr(request, 'user_payload') else None
+
+    if user_role != 'admin':
         return jsonify({"error": "Only admin can add or restock products"}), 403
 
     data = request.get_json(silent=True) or {}
@@ -113,7 +110,7 @@ def add_or_restock():
     if errors:
         return jsonify({"errors": errors}), 400
 
-    # --- Check existing (only fetch id + quantity) ---
+    # --- Check existing ---
     existing = (
         db.session.query(Product.id, Product.quantity)
         .filter(Product.name == name)
@@ -121,7 +118,6 @@ def add_or_restock():
     )
 
     if existing:
-        # Restock: single UPDATE statement – avoids loading full ORM object
         db.session.query(Product).filter(Product.id == existing.id).update(
             {
                 "quantity": existing.quantity + quantity,
@@ -148,14 +144,13 @@ def add_or_restock():
         msg = f"Added new product '{name}'."
 
     log = AuditLog(
-        user_id=current_user.id,
+        user_id=user_id,
         action=action,
         details=f"product_id={product_id} qty={quantity}",
     )
     db.session.add(log)
     db.session.commit()
 
-    # Invalidate cache after write
     app_cache.invalidate_products()
     app_cache.invalidate_low_stock()
 
@@ -170,8 +165,6 @@ def add_or_restock():
 def low_stock():
     """
     Returns cached low-stock list.
-    WHY: This is polled by the dashboard; caching prevents a DB query every
-    time the page loads.
     """
     rows = app_cache.get_low_stock()
     return jsonify([
