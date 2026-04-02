@@ -5,35 +5,18 @@ MOST CRITICAL PERFORMANCE PATH in the entire system.
 
 OPTIMIZATIONS:
 1. Single DB transaction for: stock reduction + sale insert + debt insert.
-   WHY: avoids partial writes if a step fails; only ONE commit round-trip.
 2. Product fetched with only required fields (id, quantity, prices).
-3. Active day fetched with only id + is_closed.
-4. No ORM object loaded for stock update – raw UPDATE used.
-5. Cache invalidated only after successful commit.
+3. No ORM object loaded for stock update – raw UPDATE used.
+4. Cache invalidated only after successful commit.
 """
 
 from flask import request, jsonify, current_app
 from flask_login import login_required, current_user
-from sqlalchemy import func
 
 from app.sales import sales_bp
 from app.extensions import db
-from app.models import Product, Sale, Debt, Day, AuditLog, Notification, User
+from app.models import Product, Sale, Debt, AuditLog, Notification, User
 from app import cache as app_cache
-
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-def _get_open_day():
-    """Fetch (id,) of today's open day. Returns None if none open."""
-    from datetime import date
-    return (
-        db.session.query(Day.id)
-        .filter(Day.date == date.today(), Day.is_closed == False)  # noqa: E712
-        .first()
-    )
 
 
 # ---------------------------------------------------------------------------
@@ -64,7 +47,7 @@ def log_sale():
 
     All DB writes happen in ONE transaction:
       1. Validate stock
-      2. Reduce product.quantity  (UPDATE, no ORM load)
+      2. Reduce product.quantity (UPDATE, no ORM load)
       3. Insert Sale row
       4. Insert Debt row (if debt)
       5. Insert AuditLog row
@@ -124,13 +107,6 @@ def log_sale():
             "error": f"Insufficient stock. Available: {product_row.quantity}."
         }), 409
 
-    # --- Fetch open day ---
-    day_row = _get_open_day()
-    if not day_row:
-        return jsonify({"error": "No open day. Please open a day first."}), 409
-
-    day_id = day_row.id
-
     # --- Compute financials ---
     total_price = round(product_row.selling_price * quantity_sold, 2)
     profit = round((product_row.selling_price - product_row.buying_price) * quantity_sold, 2)
@@ -143,11 +119,10 @@ def log_sale():
             synchronize_session=False,
         )
 
-        # 2. Insert sale
+        # 2. Insert sale (no day_id anymore)
         sale = Sale(
             product_id=product_id,
             user_id=current_user.id,
-            day_id=day_id,
             quantity_sold=quantity_sold,
             unit_price=product_row.selling_price,
             buying_price_at_sale=product_row.buying_price,
@@ -177,7 +152,6 @@ def log_sale():
 
         # 5. Low-stock notification (send to all admins)
         new_qty = product_row.quantity - quantity_sold
-        from flask import current_app
         threshold = current_app.config.get("LOW_STOCK_THRESHOLD", 5)
         if new_qty <= threshold:
             admin_users = User.query.filter_by(role='admin').all()
@@ -223,15 +197,12 @@ def log_sale():
 
 
 # ---------------------------------------------------------------------------
-# GET /sales/today  – all sales for the open day
+# GET /sales/today  – all sales from today
 # ---------------------------------------------------------------------------
 @sales_bp.route("/today", methods=["GET"])
 @login_required
 def today_sales():
-    """
-    Returns today's sales joined with product name.
-    WHY join: avoids N+1 queries (one query per sale to get product name).
-    """
+    """Returns today's sales joined with product name."""
     from datetime import date
     from app.models import Product as Prod
 
@@ -247,8 +218,7 @@ def today_sales():
             Prod.name.label("product_name"),
         )
         .join(Prod, Sale.product_id == Prod.id)
-        .join(Day, Sale.day_id == Day.id)
-        .filter(Day.date == date.today())
+        .filter(db.func.date(Sale.timestamp) == date.today())
         .order_by(Sale.timestamp.desc())
         .limit(500)
         .all()
@@ -270,11 +240,10 @@ def today_sales():
 
 
 # ---------------------------------------------------------------------------
-# Minimal HTML sales page
+# Minimal HTML sales page (same as before)
 # ---------------------------------------------------------------------------
 def _sales_html():
-    return """
-<!DOCTYPE html>
+    return """<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -325,8 +294,7 @@ def _sales_html():
   <div class="card" style="margin-top:1.5rem; max-width:700px">
     <h2>Today's Sales</h2>
     <table id="sales-table">
-      <thead><td><th>Product</th><th>Qty</th><th>Total</th><th>Profit</th><th>Type</th><th>Time</th></tr>
-      </thead>
+      <thead><tr><th>Product</th><th>Qty</th><th>Total</th><th>Profit</th><th>Type</th><th>Time</th></tr></thead>
       <tbody></tbody>
     </table>
   </div>
@@ -387,5 +355,4 @@ def _sales_html():
     loadTodaySales();
   </script>
 </body>
-</html>
-""", 200
+</html>""", 200

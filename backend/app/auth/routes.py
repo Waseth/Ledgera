@@ -1,18 +1,15 @@
 """
-auth/routes.py – Authentication: login, logout, role routing.
-
-OPTIMIZATION:
-- We query only (id, email, password_hash, role, is_active) – not the full
-  User row – to keep the response payload tiny.
-- Admin credentials are checked against the in-memory config hash; no DB hit
-  needed for admin login.
+auth/routes.py – Authentication with JWT
 """
 
 from flask import (
-    current_app, request, redirect, url_for, jsonify, session
+    current_app, request, jsonify
 )
 from flask_login import login_user, logout_user, login_required, current_user
-from werkzeug.security import check_password_hash
+from werkzeug.security import check_password_hash, generate_password_hash
+import jwt
+from datetime import datetime, timedelta
+from functools import wraps
 
 from app.auth import auth_bp
 from app.extensions import db
@@ -20,31 +17,68 @@ from app.models import User, AuditLog
 
 
 # ---------------------------------------------------------------------------
-# Helpers
+# JWT Helper Functions
 # ---------------------------------------------------------------------------
 
+def generate_token(user_id, email, role):
+    """Generate JWT token for authenticated user."""
+    payload = {
+        'user_id': user_id,
+        'email': email,
+        'role': role,
+        'exp': datetime.utcnow() + timedelta(hours=current_app.config.get('JWT_EXPIRATION_HOURS', 24)),
+        'iat': datetime.utcnow()
+    }
+    token = jwt.encode(payload, current_app.config['JWT_SECRET_KEY'], algorithm='HS256')
+    return token
+
+
+def token_required(f):
+    """Decorator to verify JWT token."""
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        token = None
+        auth_header = request.headers.get('Authorization')
+
+        if auth_header and auth_header.startswith('Bearer '):
+            token = auth_header.split(' ')[1]
+
+        if not token:
+            return jsonify({'error': 'Token is missing!'}), 401
+
+        try:
+            payload = jwt.decode(token, current_app.config['JWT_SECRET_KEY'], algorithms=['HS256'])
+            request.user_payload = payload
+        except jwt.ExpiredSignatureError:
+            return jsonify({'error': 'Token has expired!'}), 401
+        except jwt.InvalidTokenError:
+            return jsonify({'error': 'Invalid token!'}), 401
+
+        return f(*args, **kwargs)
+    return decorated
+
+
 def _log_action(user_id, action, details=None):
-    """Insert a single audit row; kept as a helper to reuse across modules."""
+    """Insert a single audit row."""
     log = AuditLog(user_id=user_id, action=action, details=details)
     db.session.add(log)
-    # Caller is responsible for commit
 
 
 def _user_dashboard(role):
     if role == "admin":
-        return url_for("reports.dashboard_page")
-    return url_for("sales.index")
+        return "/reports/dashboard-page"
+    return "/sales"
 
 
 # ---------------------------------------------------------------------------
-# Login
+# Login with JWT
 # ---------------------------------------------------------------------------
 @auth_bp.route("/login", methods=["POST"])
 def login():
     """
     POST /auth/login
     Body: { "email": "...", "password": "..." }
-    Returns JSON with redirect URL on success.
+    Returns JWT token on success.
     """
     data = request.get_json(silent=True) or {}
     email = (data.get("email") or "").strip().lower()
@@ -53,7 +87,7 @@ def login():
     if not email or not password:
         return jsonify({"error": "Email and password are required."}), 400
 
-    # --- Check admin (no DB query needed) ---
+    # --- Check admin ---
     admin_email = current_app.config["ADMIN_EMAIL"].lower()
     admin_hash = current_app.config["ADMIN_PASSWORD_HASH"]
 
@@ -61,16 +95,25 @@ def login():
         if not check_password_hash(admin_hash, password):
             return jsonify({"error": "Invalid credentials."}), 401
 
-        # Create a transient User-like object for Flask-Login
-        # (admin is not stored in DB per spec)
         admin_user = _get_or_create_admin_user()
-        login_user(admin_user)
-        return jsonify({"redirect": url_for("reports.dashboard_page")}), 200
 
-    # --- Shopkeeper: single targeted query ---
-    # WHY with_entities: loads only needed columns, not full ORM object initially
+        # Generate JWT token
+        token = generate_token(admin_user.id, admin_user.email, admin_user.role)
+
+        return jsonify({
+            "token": token,
+            "user": {
+                "id": admin_user.id,
+                "name": admin_user.name,
+                "email": admin_user.email,
+                "role": admin_user.role
+            },
+            "redirect": _user_dashboard(admin_user.role)
+        }), 200
+
+    # --- Check shopkeeper ---
     row = (
-        db.session.query(User.id, User.password_hash, User.role, User.is_active)
+        db.session.query(User.id, User.password_hash, User.role, User.is_active, User.name)
         .filter(User.email == email)
         .first()
     )
@@ -81,44 +124,49 @@ def login():
     if not row.is_active:
         return jsonify({"error": "Account is deactivated."}), 403
 
-    # Load full user object for Flask-Login (needed for UserMixin methods)
-    user = db.session.get(User, row.id)
-    login_user(user)
+    # Generate JWT token
+    token = generate_token(row.id, email, row.role)
 
     with db.session.begin_nested():
-        _log_action(user.id, "login")
+        _log_action(row.id, "login")
     db.session.commit()
 
-    return jsonify({"redirect": _user_dashboard(row.role)}), 200
+    return jsonify({
+        "token": token,
+        "user": {
+            "id": row.id,
+            "name": row.name,
+            "email": email,
+            "role": row.role
+        },
+        "redirect": _user_dashboard(row.role)
+    }), 200
+
+
+@auth_bp.route("/verify", methods=["GET"])
+@token_required
+def verify_token():
+    """Verify if token is valid."""
+    return jsonify({
+        "valid": True,
+        "user": request.user_payload
+    }), 200
 
 
 @auth_bp.route("/logout", methods=["POST"])
-@login_required
 def logout():
-    user_id = current_user.id if not getattr(current_user, "_is_admin", False) else None
-    if user_id:
-        _log_action(user_id, "logout")
-        db.session.commit()
-    logout_user()
-    return jsonify({"redirect": url_for("auth.login_page")}), 200
-
-
-@auth_bp.route("/login", methods=["GET"])
-def login_page():
-    """Simple HTML login page."""
-    return _login_html()
+    """Logout - client just discards the token."""
+    return jsonify({"message": "Logged out successfully"}), 200
 
 
 # ---------------------------------------------------------------------------
 # Admin: create shopkeeper account
 # ---------------------------------------------------------------------------
 @auth_bp.route("/shopkeepers", methods=["POST"])
-@login_required
+@token_required
 def create_shopkeeper():
-    if current_user.role != "admin":
+    if request.user_payload.get('role') != "admin":
         return jsonify({"error": "Forbidden."}), 403
-
-    from werkzeug.security import generate_password_hash
 
     data = request.get_json(silent=True) or {}
     name = (data.get("name") or "").strip()
@@ -128,7 +176,6 @@ def create_shopkeeper():
     if not name or not email or len(password) < 6:
         return jsonify({"error": "name, email, and password (≥6 chars) required."}), 400
 
-    # Check duplicate – only fetch id, email
     exists = db.session.query(User.id).filter(User.email == email).first()
     if exists:
         return jsonify({"error": "Email already registered."}), 409
@@ -140,7 +187,7 @@ def create_shopkeeper():
         role="shopkeeper",
     )
     db.session.add(user)
-    db.session.flush()   # get user.id before commit
+    db.session.flush()
     _log_action(None, "create_shopkeeper", f"email={email}")
     db.session.commit()
 
@@ -148,9 +195,9 @@ def create_shopkeeper():
 
 
 @auth_bp.route("/shopkeepers", methods=["GET"])
-@login_required
+@token_required
 def list_shopkeepers():
-    if current_user.role != "admin":
+    if request.user_payload.get('role') != "admin":
         return jsonify({"error": "Forbidden."}), 403
 
     rows = db.session.query(
@@ -169,11 +216,7 @@ def list_shopkeepers():
 # ---------------------------------------------------------------------------
 
 def _get_or_create_admin_user():
-    """
-    Return the DB record for admin (created once if not exists).
-    We store admin in DB solely so Flask-Login can serialize the session.
-    """
-    from werkzeug.security import generate_password_hash
+    """Return the DB record for admin (created once if not exists)."""
     admin_email = current_app.config["ADMIN_EMAIL"]
     user = db.session.query(User).filter(User.email == admin_email).first()
     if not user:
@@ -186,61 +229,3 @@ def _get_or_create_admin_user():
         db.session.add(user)
         db.session.commit()
     return user
-
-
-def _login_html():
-    return """
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Shop Login</title>
-  <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: system-ui, sans-serif; background: #f0f2f5;
-           display: flex; align-items: center; justify-content: center;
-           min-height: 100vh; }
-    .card { background: #fff; padding: 2rem; border-radius: 10px;
-            box-shadow: 0 2px 16px rgba(0,0,0,.1); width: 360px; }
-    h2 { margin-bottom: 1.5rem; color: #1a1a2e; text-align: center; }
-    label { display: block; font-size: .85rem; margin-bottom: .25rem; color: #555; }
-    input { width: 100%; padding: .6rem .8rem; border: 1px solid #ddd;
-            border-radius: 6px; font-size: 1rem; margin-bottom: 1rem; }
-    button { width: 100%; padding: .75rem; background: #2563eb; color: #fff;
-             border: none; border-radius: 6px; font-size: 1rem; cursor: pointer; }
-    button:hover { background: #1d4ed8; }
-    #msg { text-align: center; margin-top: .75rem; color: #dc2626; font-size: .9rem; }
-  </style>
-</head>
-<body>
-  <div class="card">
-    <h2>🛒 Shop Login</h2>
-    <label>Email</label>
-    <input type="email" id="email" placeholder="you@example.com">
-    <label>Password</label>
-    <input type="password" id="pwd" placeholder="••••••••">
-    <button onclick="doLogin()">Sign In</button>
-    <p id="msg"></p>
-  </div>
-  <script>
-    async function doLogin() {
-      const msg = document.getElementById('msg');
-      msg.textContent = '';
-      const res = await fetch('/auth/login', {
-        method: 'POST',
-        headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({
-          email: document.getElementById('email').value,
-          password: document.getElementById('pwd').value
-        })
-      });
-      const data = await res.json();
-      if (res.ok) window.location.href = data.redirect;
-      else msg.textContent = data.error || 'Login failed.';
-    }
-    document.addEventListener('keydown', e => { if(e.key==='Enter') doLogin(); });
-  </script>
-</body>
-</html>
-""", 200

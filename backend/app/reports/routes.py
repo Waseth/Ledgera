@@ -3,7 +3,7 @@ reports/routes.py – Daily, weekly, monthly reports + admin dashboard.
 
 OPTIMIZATIONS:
 - All totals use SQL SUM/COUNT aggregations, never Python loops.
-- Date filtering uses indexed columns (timestamp, date).
+- Date filtering uses indexed columns (timestamp).
 - Dashboard returns all KPIs in ONE request (no multiple round trips).
 - LIMIT applied on itemized queries.
 """
@@ -15,7 +15,7 @@ from sqlalchemy import func
 
 from app.reports import reports_bp
 from app.extensions import db
-from app.models import Sale, Expense, Day, Debt, Product
+from app.models import Sale, Expense, Debt, Product
 from app.reports.dashboard_html import ADMIN_DASHBOARD_HTML
 
 
@@ -38,7 +38,6 @@ def _sales_aggregates(start: date, end: date):
     """
     Returns (total_revenue, total_profit, cash_revenue, debt_revenue, sale_count)
     for the given date range using a SINGLE query.
-    WHY: one round-trip instead of 5 separate queries.
     """
     result = db.session.query(
         func.coalesce(func.sum(Sale.total_price), 0.0).label("revenue"),
@@ -54,8 +53,9 @@ def _sales_aggregates(start: date, end: date):
             ), 0.0
         ).label("debt_revenue"),
         func.count(Sale.id).label("count"),
-    ).join(Day, Sale.day_id == Day.id).filter(
-        Day.date >= start, Day.date <= end
+    ).filter(
+        db.func.date(Sale.timestamp) >= start,
+        db.func.date(Sale.timestamp) <= end
     ).first()
 
     return result
@@ -64,8 +64,9 @@ def _sales_aggregates(start: date, end: date):
 def _expenses_total(start: date, end: date):
     return db.session.query(
         func.coalesce(func.sum(Expense.amount), 0.0)
-    ).join(Day, Expense.day_id == Day.id).filter(
-        Day.date >= start, Day.date <= end
+    ).filter(
+        db.func.date(Expense.timestamp) >= start,
+        db.func.date(Expense.timestamp) <= end
     ).scalar()
 
 
@@ -81,12 +82,6 @@ def daily_report():
     expenses = _expenses_total(start, start)
     net_profit = round(agg.profit - expenses, 2)
 
-    # Day close status
-    day_row = db.session.query(
-        Day.id, Day.is_closed, Day.opening_cash,
-        Day.actual_cash, Day.mismatch,
-    ).filter(Day.date == start).first()
-
     return jsonify({
         "date": start.isoformat(),
         "revenue": round(agg.revenue, 2),
@@ -96,13 +91,6 @@ def daily_report():
         "expenses": round(expenses, 2),
         "net_profit": net_profit,
         "sale_count": agg.count,
-        "day": {
-            "id": day_row.id if day_row else None,
-            "is_closed": day_row.is_closed if day_row else None,
-            "opening_cash": day_row.opening_cash if day_row else None,
-            "actual_cash": day_row.actual_cash if day_row else None,
-            "mismatch": day_row.mismatch if day_row else None,
-        } if day_row else None,
     }), 200
 
 
@@ -119,18 +107,20 @@ def weekly_report():
     expenses = _expenses_total(start, today)
     net_profit = round(agg.profit - expenses, 2)
 
-    # Per-day breakdown using GROUP BY
+    # Per-day breakdown using GROUP BY on timestamp
     daily_rows = (
         db.session.query(
-            Day.date,
+            func.date(Sale.timestamp).label("date"),
             func.coalesce(func.sum(Sale.total_price), 0.0).label("revenue"),
             func.coalesce(func.sum(Sale.profit), 0.0).label("profit"),
             func.count(Sale.id).label("count"),
         )
-        .outerjoin(Sale, Sale.day_id == Day.id)
-        .filter(Day.date >= start, Day.date <= today)
-        .group_by(Day.date)
-        .order_by(Day.date)
+        .filter(
+            func.date(Sale.timestamp) >= start,
+            func.date(Sale.timestamp) <= today
+        )
+        .group_by(func.date(Sale.timestamp))
+        .order_by(func.date(Sale.timestamp))
         .all()
     )
 
@@ -144,7 +134,7 @@ def weekly_report():
         "sale_count": agg.count,
         "daily_breakdown": [
             {
-                "date": r.date.isoformat(),
+                "date": str(r.date),
                 "revenue": round(r.revenue, 2),
                 "profit": round(r.profit, 2),
                 "sale_count": r.count,
@@ -191,8 +181,10 @@ def monthly_report():
             func.sum(Sale.profit).label("profit"),
         )
         .join(Product, Sale.product_id == Product.id)
-        .join(Day, Sale.day_id == Day.id)
-        .filter(Day.date >= start, Day.date <= end)
+        .filter(
+            db.func.date(Sale.timestamp) >= start,
+            db.func.date(Sale.timestamp) <= end
+        )
         .group_by(Product.id, Product.name)
         .order_by(func.sum(Sale.total_price).desc())
         .limit(5)
@@ -220,6 +212,7 @@ def monthly_report():
             for r in top_products
         ],
     }), 200
+
 
 # ---------------------------------------------------------------------------
 # GET /reports/product-performance  – performance for a specific product
@@ -252,30 +245,30 @@ def product_performance():
         func.coalesce(func.sum(Sale.total_price), 0).label("total_revenue"),
         func.coalesce(func.sum(Sale.profit), 0).label("total_profit"),
         func.count(Sale.id).label("transaction_count")
-    ).join(Day, Sale.day_id == Day.id).filter(
+    ).filter(
         Sale.product_id == product_id,
-        Day.date >= start_date
+        db.func.date(Sale.timestamp) >= start_date
     ).first()
 
     # Get daily breakdown for chart display
     daily_breakdown = db.session.query(
-        Day.date,
+        db.func.date(Sale.timestamp).label("date"),
         func.coalesce(func.sum(Sale.quantity_sold), 0).label("quantity"),
         func.coalesce(func.sum(Sale.total_price), 0).label("revenue"),
         func.coalesce(func.sum(Sale.profit), 0).label("profit")
-    ).join(Sale, Sale.day_id == Day.id).filter(
+    ).filter(
         Sale.product_id == product_id,
-        Day.date >= start_date
-    ).group_by(Day.date).order_by(Day.date).all()
+        db.func.date(Sale.timestamp) >= start_date
+    ).group_by(db.func.date(Sale.timestamp)).order_by(db.func.date(Sale.timestamp)).all()
 
     # Get payment type breakdown
     payment_breakdown = db.session.query(
         Sale.payment_type,
         func.count(Sale.id).label("count"),
         func.sum(Sale.total_price).label("amount")
-    ).join(Day, Sale.day_id == Day.id).filter(
+    ).filter(
         Sale.product_id == product_id,
-        Day.date >= start_date
+        db.func.date(Sale.timestamp) >= start_date
     ).group_by(Sale.payment_type).all()
 
     return jsonify({
@@ -321,6 +314,7 @@ def product_performance():
         ]
     }), 200
 
+
 # ---------------------------------------------------------------------------
 # GET /reports/top-products  – best selling products
 # ---------------------------------------------------------------------------
@@ -353,7 +347,7 @@ def top_products():
     ).outerjoin(Sale, Sale.product_id == Product.id)
 
     if start_date:
-        query = query.join(Day, Sale.day_id == Day.id).filter(Day.date >= start_date)
+        query = query.filter(db.func.date(Sale.timestamp) >= start_date)
 
     query = query.group_by(Product.id, Product.name, Product.selling_price)
 
@@ -407,7 +401,7 @@ def dashboard_admin():
         func.coalesce(func.sum(Debt.amount), 0.0)
     ).filter(Debt.is_paid == False).scalar()  # noqa: E712
 
-    # Low-stock count (use index)
+    # Low-stock count
     from flask import current_app
     threshold = current_app.config.get("LOW_STOCK_THRESHOLD", 5)
     low_stock_count = db.session.query(
@@ -434,6 +428,7 @@ def dashboard_admin():
         "date": today.isoformat(),
     }), 200
 
+
 # ---------------------------------------------------------------------------
 # GET /reports/notifications  – get notifications for current user
 # ---------------------------------------------------------------------------
@@ -443,10 +438,9 @@ def get_notifications():
     """Get notifications for the current user."""
     from app.models import Notification
 
-    # Get user-specific notifications and global notifications
     notifications = Notification.query.filter(
         (Notification.user_id == current_user.id) |
-        (Notification.user_id == None)  # Global notifications
+        (Notification.user_id == None)
     ).order_by(Notification.created_at.desc()).limit(50).all()
 
     return jsonify([

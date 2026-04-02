@@ -68,7 +68,7 @@ def get_product(product_id):
 
 
 # ---------------------------------------------------------------------------
-# POST /products  – add new OR restock existing
+# POST /products  – add new OR restock existing (ADMIN ONLY)
 # ---------------------------------------------------------------------------
 @products_bp.route("", methods=["POST"])
 @login_required
@@ -80,8 +80,9 @@ def add_or_restock():
     WHY combined endpoint: avoids a separate "check-then-create" round-trip
     from the frontend; one request handles both cases.
     """
-    if current_user.role not in ("admin", "shopkeeper"):
-        return jsonify({"error": "Forbidden."}), 403
+    # --- ROLE CHECK: Only admin can add or restock products ---
+    if current_user.role != 'admin':
+        return jsonify({"error": "Only admin can add or restock products"}), 403
 
     data = request.get_json(silent=True) or {}
     name = (data.get("name") or "").strip()
@@ -126,7 +127,7 @@ def add_or_restock():
                 "buying_price": buying_price,
                 "selling_price": selling_price,
             },
-            synchronize_session=False,  # WHY: skip ORM sync, faster
+            synchronize_session=False,
         )
         action = "restock"
         product_id = existing.id

@@ -1,17 +1,14 @@
 """
 Application factory.
-
-WHY factory pattern: lets us create multiple app instances for testing
-without polluting global state, and keeps imports clean.
 """
 
 import logging
+import os
 from flask import Flask
-from flask_cors import CORS  # Add this import
 from werkzeug.security import generate_password_hash
 
 from config import Config
-from app.extensions import db, login_manager
+from app.extensions import db, login_manager, cors
 
 
 def create_app(config_class=Config):
@@ -19,29 +16,7 @@ def create_app(config_class=Config):
     app.config.from_object(config_class)
 
     # -----------------------------------------------------------------------
-    # CORS Configuration - REQUIRED for production
-    # -----------------------------------------------------------------------
-    # Get allowed origins from environment or use defaults
-    allowed_origins = app.config.get('CORS_ORIGINS', [
-        'http://localhost:3000',           # Local development
-        'https://ledgera-frontend.railway.app',  # If frontend on Railway
-        'https://ledgera-production-d434.up.railway.app'  # Backend itself
-    ])
-
-    CORS(app,
-         origins=allowed_origins,
-         supports_credentials=True,
-         allow_headers=['Content-Type', 'Authorization', 'X-Requested-With'],
-         expose_headers=['Content-Type', 'Authorization'],
-         methods=['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-         max_age=3600  # Cache preflight requests for 1 hour
-    )
-
-    # Log CORS configuration
-    app.logger.info(f"CORS enabled for origins: {allowed_origins}")
-
-    # -----------------------------------------------------------------------
-    # Logging: only errors – saves CPU cycles writing unnecessary log lines
+    # Logging: only errors
     # -----------------------------------------------------------------------
     app.logger.setLevel(logging.ERROR)
     logging.getLogger("sqlalchemy.engine").setLevel(logging.ERROR)
@@ -51,6 +26,25 @@ def create_app(config_class=Config):
     # -----------------------------------------------------------------------
     db.init_app(app)
     login_manager.init_app(app)
+
+    # Get allowed origins from environment variable or use defaults
+    allowed_origins = os.environ.get("CORS_ORIGINS", "http://localhost:3000,http://localhost:5173,http://localhost:8080").split(",")
+
+    # Also add your production frontend URL when deployed
+    # allowed_origins.append("https://your-frontend-domain.com")
+
+    # Configure CORS - Allow frontend to connect
+    cors.init_app(app,
+        resources={r"/*": {
+            "origins": allowed_origins,
+            "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+            "allow_headers": ["Content-Type", "Authorization", "X-Requested-With"],
+            "expose_headers": ["Content-Type", "Authorization"],
+            "supports_credentials": True,  # Important for cookies
+            "allow_credentials": True
+        }},
+        supports_credentials=True
+    )
 
     # -----------------------------------------------------------------------
     # Store hashed admin password in config at startup
@@ -66,7 +60,6 @@ def create_app(config_class=Config):
 
     @login_manager.user_loader
     def load_user(user_id):
-        # Use .get() → primary-key lookup, fastest possible query
         return db.session.get(User, int(user_id))
 
     # -----------------------------------------------------------------------
@@ -76,7 +69,6 @@ def create_app(config_class=Config):
     from app.products.routes import products_bp
     from app.sales.routes import sales_bp
     from app.debts.routes import debts_bp
-    from app.days.routes import days_bp
     from app.reports.routes import reports_bp
     from app.notifications.routes import notifications_bp
 
@@ -84,37 +76,13 @@ def create_app(config_class=Config):
     app.register_blueprint(products_bp, url_prefix="/products")
     app.register_blueprint(sales_bp, url_prefix="/sales")
     app.register_blueprint(debts_bp, url_prefix="/debts")
-    app.register_blueprint(days_bp, url_prefix="/days")
     app.register_blueprint(reports_bp, url_prefix="/reports")
     app.register_blueprint(notifications_bp, url_prefix="/notifications")
 
     # -----------------------------------------------------------------------
-    # Configure database-specific settings
+    # Create tables
     # -----------------------------------------------------------------------
     with app.app_context():
-        _configure_database(app)
         db.create_all()
 
     return app
-
-
-def _configure_database(app):
-    """
-    Configure database-specific settings.
-    For SQLite: apply performance pragmas
-    For MySQL: no special configuration needed
-    """
-    from sqlalchemy import event
-    from app.extensions import db as _db
-
-    # Only configure SQLite-specific pragmas
-    if 'sqlite' in app.config['SQLALCHEMY_DATABASE_URI']:
-        @event.listens_for(_db.engine, "connect")
-        def set_sqlite_pragma(dbapi_conn, _):
-            cursor = dbapi_conn.cursor()
-            cursor.execute("PRAGMA journal_mode=WAL")
-            cursor.execute("PRAGMA synchronous=NORMAL")
-            cursor.execute("PRAGMA cache_size=-8000")   # 8 MB
-            cursor.execute("PRAGMA foreign_keys=ON")
-            cursor.execute("PRAGMA temp_store=MEMORY")
-            cursor.close()
