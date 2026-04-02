@@ -1,3 +1,4 @@
+from app.auth.routes import token_required
 """
 sales/routes.py – Sales logging (cash or debt).
 

@@ -1,3 +1,4 @@
+from app.auth.routes import token_required
 """
 notifications/routes.py – Notification fetch and mark-read.
 

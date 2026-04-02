@@ -1,3 +1,4 @@
+from app.auth.routes import token_required
 """
 reports/routes.py – Daily, weekly, monthly reports + admin dashboard.
 

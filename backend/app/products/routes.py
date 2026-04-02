@@ -1,3 +1,4 @@
+from app.auth.routes import token_required
 """
 products/routes.py – Stock management.
 
