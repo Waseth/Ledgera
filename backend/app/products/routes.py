@@ -61,7 +61,6 @@ def get_product(product_id):
 @products_bp.route("/<int:product_id>", methods=["PUT"])
 @token_required
 def update_product(product_id):
-    """Update product details (admin only)."""
     user_role = request.user_payload.get('role') if hasattr(request, 'user_payload') else None
     user_id = request.user_payload.get('user_id') if hasattr(request, 'user_payload') else None
 
@@ -74,7 +73,6 @@ def update_product(product_id):
 
     data = request.get_json(silent=True) or {}
 
-    # Update fields if provided
     if 'name' in data:
         product.name = data['name'].strip()
     if 'buying_price' in data:
@@ -93,7 +91,6 @@ def update_product(product_id):
     ))
     db.session.commit()
 
-    # Invalidate cache
     app_cache.invalidate_products()
     app_cache.invalidate_low_stock()
 
@@ -108,6 +105,44 @@ def update_product(product_id):
             "unit": product.unit,
         }
     }), 200
+
+
+# ---------------------------------------------------------------------------
+# DELETE /products/<id>  – delete a product (ADMIN ONLY)
+# ---------------------------------------------------------------------------
+@products_bp.route("/<int:product_id>", methods=["DELETE"])
+@token_required
+def delete_product(product_id):
+    """
+    Delete a product (admin only).
+    Only allowed if product has no sales history.
+    """
+    user_role = request.user_payload.get('role') if hasattr(request, 'user_payload') else None
+    user_id = request.user_payload.get('user_id') if hasattr(request, 'user_payload') else None
+
+    if user_role != 'admin':
+        return jsonify({"error": "Only admin can delete products"}), 403
+
+    product = Product.query.get(product_id)
+    if not product:
+        return jsonify({"error": "Product not found."}), 404
+
+    if product.sales.count() > 0:
+        return jsonify({"error": "Cannot delete product with sales history."}), 400
+
+    db.session.delete(product)
+
+    db.session.add(AuditLog(
+        user_id=user_id,
+        action="delete_product",
+        details=f"product_id={product_id} name={product.name}",
+    ))
+    db.session.commit()
+
+    app_cache.invalidate_products()
+    app_cache.invalidate_low_stock()
+
+    return jsonify({"message": f"Product '{product.name}' deleted successfully."}), 200
 
 
 # ---------------------------------------------------------------------------

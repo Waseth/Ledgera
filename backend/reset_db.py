@@ -7,7 +7,6 @@ Run: python reset_db.py
 from app import create_app, db
 from app.models import User, Product, Sale, Debt, Expense, Notification, AuditLog
 from werkzeug.security import generate_password_hash
-from sqlalchemy import text
 
 def reset_database():
     app = create_app()
@@ -18,29 +17,28 @@ def reset_database():
         print("=" * 50)
 
         # Show counts before deletion
-        print("\n📊 Records before reset:")
+        print("\nRecords before reset:")
         print(f"  Products: {Product.query.count()}")
         print(f"  Sales: {Sale.query.count()}")
         print(f"  Debts: {Debt.query.count()}")
         print(f"  Expenses: {Expense.query.count()}")
         print(f"  Notifications: {Notification.query.count()}")
         print(f"  Audit Logs: {AuditLog.query.count()}")
-        print(f"  Users (shopkeepers): {User.query.filter(User.role == 'shopkeeper').count()}")
+        print(f"  Shopkeepers: {User.query.filter(User.role == 'shopkeeper').count()}")
 
-        # Disable foreign key checks for MySQL
-        if 'mysql' in app.config['SQLALCHEMY_DATABASE_URI']:
-            db.session.execute(text('SET FOREIGN_KEY_CHECKS = 0'))
+        # Clear all data tables (order matters for foreign keys)
+        print("\nClearing data...")
 
-        # Clear all data tables
-        db.session.query(AuditLog).delete()
-        db.session.query(Notification).delete()
-        db.session.query(Debt).delete()
-        db.session.query(Expense).delete()
-        db.session.query(Sale).delete()
-        db.session.query(Product).delete()
+        # Delete in correct order to avoid foreign key issues
+        AuditLog.query.delete()
+        Notification.query.delete()
+        Debt.query.delete()
+        Expense.query.delete()
+        Sale.query.delete()
+        Product.query.delete()
 
         # Delete all shopkeepers (keep admin)
-        db.session.query(User).filter(User.role != 'admin').delete()
+        User.query.filter(User.role != 'admin').delete()
 
         # Ensure admin user exists with correct credentials
         admin = User.query.filter_by(role='admin').first()
@@ -57,16 +55,12 @@ def reset_database():
             admin.password_hash = generate_password_hash("joynoela@1998")
             admin.name = "Admin"
 
-        # Re-enable foreign key checks
-        if 'mysql' in app.config['SQLALCHEMY_DATABASE_URI']:
-            db.session.execute(text('SET FOREIGN_KEY_CHECKS = 1'))
-
         db.session.commit()
 
         # Show results
         print("\n✅ DATABASE RESET COMPLETE!")
         print("-" * 50)
-        print("\n📊 Records after reset:")
+        print("\nRecords after reset:")
         print(f"  Products: {Product.query.count()}")
         print(f"  Sales: {Sale.query.count()}")
         print(f"  Debts: {Debt.query.count()}")
