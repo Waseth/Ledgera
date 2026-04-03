@@ -14,8 +14,6 @@ export function ToastProvider({ children }) {
     }, duration);
   }, []);
 
-  const icons = { success: '✓', error: '✕', warning: '⚠', info: 'ℹ' };
-
   return (
     <ToastContext.Provider value={{ toast }}>
       {children}
@@ -30,9 +28,6 @@ export function ToastProvider({ children }) {
               exit={{    opacity: 0, x: 60, scale: 0.94 }}
               transition={{ type: 'spring', stiffness: 320, damping: 26 }}
             >
-              <span style={{ fontWeight: 700, fontSize: '1rem' }}>
-                {icons[t.type]}
-              </span>
               <span style={{ fontSize: '0.875rem', color: 'var(--text-primary)' }}>
                 {t.message}
               </span>

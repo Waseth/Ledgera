@@ -1,12 +1,5 @@
 """
 products/routes.py – Stock management.
-
-OPTIMIZATIONS:
-- GET list uses cache (avoids DB hit on every page load).
-- Add/restock uses a single UPDATE instead of load → modify → save.
-- Cache is invalidated after any write.
-- Only required columns fetched (never SELECT *).
-- Input validation before touching the DB.
 """
 
 from flask import request, jsonify
@@ -24,9 +17,6 @@ from app.auth.routes import token_required
 @products_bp.route("", methods=["GET"])
 @token_required
 def list_products():
-    """
-    Returns cached product list.
-    """
     rows = app_cache.get_cached_products()
     return jsonify([
         {
@@ -66,16 +56,66 @@ def get_product(product_id):
 
 
 # ---------------------------------------------------------------------------
+# PUT /products/<id>  – update product (ADMIN ONLY)
+# ---------------------------------------------------------------------------
+@products_bp.route("/<int:product_id>", methods=["PUT"])
+@token_required
+def update_product(product_id):
+    """Update product details (admin only)."""
+    user_role = request.user_payload.get('role') if hasattr(request, 'user_payload') else None
+    user_id = request.user_payload.get('user_id') if hasattr(request, 'user_payload') else None
+
+    if user_role != 'admin':
+        return jsonify({"error": "Only admin can update products"}), 403
+
+    product = Product.query.get(product_id)
+    if not product:
+        return jsonify({"error": "Product not found."}), 404
+
+    data = request.get_json(silent=True) or {}
+
+    # Update fields if provided
+    if 'name' in data:
+        product.name = data['name'].strip()
+    if 'buying_price' in data:
+        product.buying_price = float(data['buying_price'])
+    if 'selling_price' in data:
+        product.selling_price = float(data['selling_price'])
+    if 'quantity' in data:
+        product.quantity = int(data['quantity'])
+    if 'unit' in data:
+        product.unit = data['unit'].strip()
+
+    db.session.add(AuditLog(
+        user_id=user_id,
+        action="update_product",
+        details=f"product_id={product_id}",
+    ))
+    db.session.commit()
+
+    # Invalidate cache
+    app_cache.invalidate_products()
+    app_cache.invalidate_low_stock()
+
+    return jsonify({
+        "message": "Product updated successfully.",
+        "product": {
+            "id": product.id,
+            "name": product.name,
+            "buying_price": product.buying_price,
+            "selling_price": product.selling_price,
+            "quantity": product.quantity,
+            "unit": product.unit,
+        }
+    }), 200
+
+
+# ---------------------------------------------------------------------------
 # POST /products  – add new OR restock existing (ADMIN ONLY)
 # ---------------------------------------------------------------------------
 @products_bp.route("", methods=["POST"])
 @token_required
 def add_or_restock():
-    """
-    If a product with the same name exists → increase quantity (restock).
-    Otherwise → create new product.
-    """
-    # --- ROLE CHECK: Only admin can add or restock products ---
     user_role = request.user_payload.get('role') if hasattr(request, 'user_payload') else None
     user_id = request.user_payload.get('user_id') if hasattr(request, 'user_payload') else None
 
@@ -89,7 +129,6 @@ def add_or_restock():
     selling_price = data.get("selling_price")
     unit = (data.get("unit") or "piece").strip()
 
-    # --- Validation ---
     errors = []
     if not name:
         errors.append("name is required.")
@@ -110,7 +149,6 @@ def add_or_restock():
     if errors:
         return jsonify({"errors": errors}), 400
 
-    # --- Check existing ---
     existing = (
         db.session.query(Product.id, Product.quantity)
         .filter(Product.name == name)
@@ -163,9 +201,6 @@ def add_or_restock():
 @products_bp.route("/low-stock", methods=["GET"])
 @token_required
 def low_stock():
-    """
-    Returns cached low-stock list.
-    """
     rows = app_cache.get_low_stock()
     return jsonify([
         {"id": r.id, "name": r.name, "quantity": r.quantity}

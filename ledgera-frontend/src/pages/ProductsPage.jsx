@@ -1,10 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { FiBox, FiPackage, FiAlertCircle, FiRefreshCw, FiSearch } from 'react-icons/fi';
+import { FiBox, FiPackage, FiAlertCircle, FiRefreshCw, FiSearch, FiEdit2, FiPlus } from 'react-icons/fi';
 import { api } from '../api/client';
 import { useToast } from '../context/ToastContext';
 import { useAuth } from '../context/AuthContext';
 import ProductModal from '../components/ProductModal';
+import EditProductModal from '../components/EditProductModal';
 
 const fmt = n => Number(n || 0).toLocaleString('en-KE', {
   minimumFractionDigits: 2, maximumFractionDigits: 2,
@@ -25,6 +26,8 @@ export default function ProductsPage() {
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('all');
   const [modal, setModal] = useState(false);
+  const [editModal, setEditModal] = useState(false);
+  const [selectedProduct, setSelectedProduct] = useState(null);
 
   const isAdmin = user?.role === 'admin';
 
@@ -47,6 +50,11 @@ export default function ProductsPage() {
   }, [toast]);
 
   useEffect(() => { load(); }, [load]);
+
+  const handleEdit = (product) => {
+    setSelectedProduct(product);
+    setEditModal(true);
+  };
 
   const safeProducts = Array.isArray(products) ? products : [];
   const safeLowStock = Array.isArray(lowStock) ? lowStock : [];
@@ -78,12 +86,8 @@ export default function ProductsPage() {
           </p>
         </div>
         {isAdmin && (
-          <button
-            className="btn btn-primary"
-            onClick={() => setModal(true)}
-            style={{ color: '#0F172A' }}
-          >
-            <FiBox size={14} /> Add Product
+          <button className="btn btn-primary" onClick={() => setModal(true)} style={{ color: '#0F172A' }}>
+            <FiPlus size={14} /> Add Product
           </button>
         )}
       </motion.div>
@@ -147,11 +151,7 @@ export default function ProductsPage() {
             {safeLowStock.map(p => p.name).join(', ')}
           </span>
           {isAdmin && (
-            <button
-              className="btn btn-sm btn-primary"
-              onClick={() => setModal(true)}
-              style={{ color: '#0F172A' }}
-            >
+            <button className="btn btn-sm btn-primary" onClick={() => setModal(true)} style={{ color: '#0F172A' }}>
               Restock Now
             </button>
           )}
@@ -215,7 +215,7 @@ export default function ProductsPage() {
           WebkitOverflowScrolling: 'touch',
         }}
       >
-        <div style={{ minWidth: '700px' }}>
+        <div style={{ minWidth: '800px' }}>
           <table className="table">
             <thead>
               <tr>
@@ -226,13 +226,14 @@ export default function ProductsPage() {
                 <th style={{ fontFamily: 'Poppins, sans-serif' }}>Selling (KSh)</th>
                 <th style={{ fontFamily: 'Poppins, sans-serif' }}>Margin</th>
                 <th style={{ fontFamily: 'Poppins, sans-serif' }}>Stock Value</th>
+                {isAdmin && <th style={{ fontFamily: 'Poppins, sans-serif' }}>Actions</th>}
               </tr>
             </thead>
             <motion.tbody variants={container} initial="hidden" animate="show">
               {loading && (
                 [...Array(6)].map((_, i) => (
                   <tr key={i}>
-                    {[...Array(7)].map((__, j) => (
+                    {[...Array(isAdmin ? 8 : 7)].map((__, j) => (
                       <td key={j}><div className="skeleton" style={{ height: 16, width: '80%', borderRadius: 4 }} /></td>
                     ))}
                   </tr>
@@ -240,7 +241,7 @@ export default function ProductsPage() {
               )}
               {!loading && displayed.length === 0 && (
                 <tr>
-                  <td colSpan={7} style={{ textAlign: 'center' }}>
+                  <td colSpan={isAdmin ? 8 : 7} style={{ textAlign: 'center' }}>
                     <div style={{
                       display: 'flex',
                       flexDirection: 'column',
@@ -254,17 +255,13 @@ export default function ProductsPage() {
                         {search ? 'No products match your search' : 'No products yet'}
                       </p>
                       {isAdmin && !search && (
-                        <button
-                          className="btn btn-primary btn-sm"
-                          onClick={() => setModal(true)}
-                          style={{ marginTop: '0.5rem', color: '#0F172A' }}
-                        >
-                          <FiBox size={14} /> Add Your First Product
+                        <button className="btn btn-primary btn-sm" onClick={() => setModal(true)} style={{ marginTop: '0.5rem', color: '#0F172A' }}>
+                          <FiPlus size={14} /> Add Your First Product
                         </button>
                       )}
                     </div>
-                    </td>
-                  </tr>
+                   </td>
+                 </tr>
               )}
               {!loading && displayed.map(p => {
                 const margin = p.selling_price > 0
@@ -309,6 +306,23 @@ export default function ProductsPage() {
                     <td className="td-mono" style={{ color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
                       {fmt(p.selling_price * p.quantity)}
                     </td>
+                    {isAdmin && (
+                      <td style={{ whiteSpace: 'nowrap' }}>
+                        <button
+                          className="btn btn-outline btn-sm"
+                          onClick={() => handleEdit(p)}
+                          style={{
+                            padding: '0.25rem 0.5rem',
+                            fontFamily: 'Poppins, sans-serif',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '0.25rem'
+                          }}
+                        >
+                          <FiEdit2 size={12} /> Edit
+                        </button>
+                      </td>
+                    )}
                   </motion.tr>
                 );
               })}
@@ -318,6 +332,12 @@ export default function ProductsPage() {
       </motion.div>
 
       <ProductModal open={modal} onClose={() => setModal(false)} onSuccess={load} />
+      <EditProductModal
+        open={editModal}
+        onClose={() => { setEditModal(false); setSelectedProduct(null); }}
+        product={selectedProduct}
+        onSuccess={load}
+      />
 
       {/* Add responsive CSS */}
       <style>{`

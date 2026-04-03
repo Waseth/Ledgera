@@ -92,6 +92,7 @@ async function logout() {
 export const api = {
   get: (path, requiresAuth = true) => request('GET', path, undefined, requiresAuth),
   post: (path, body, requiresAuth = true) => request('POST', path, body, requiresAuth),
+  put: (path, body, requiresAuth = true) => request('PUT', path, body, requiresAuth),  // ADD THIS LINE
   delete: (path, requiresAuth = true) => request('DELETE', path, undefined, requiresAuth),
   login,
   logout,

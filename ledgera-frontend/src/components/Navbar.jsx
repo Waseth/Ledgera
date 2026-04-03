@@ -3,13 +3,14 @@ import { NavLink, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   FiHome, FiBox, FiCreditCard, FiPieChart, FiUsers,
-  FiShoppingCart, FiSun, FiMoon, FiBell, FiLogOut
+  FiShoppingCart, FiSun, FiMoon, FiBell, FiLogOut, FiAlertCircle
 } from 'react-icons/fi';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { useToast } from '../context/ToastContext';
 import { api } from '../api/client';
 import NotifPanel from './NotifPanel';
+import Modal from './Modal';
 
 export default function Navbar() {
   const { user, logout } = useAuth();
@@ -19,8 +20,8 @@ export default function Navbar() {
 
   const [notifOpen, setNotifOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
-  const [logoutConfirm, setLogoutConfirm] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [logoutModalOpen, setLogoutModalOpen] = useState(false);
 
   // Only fetch notifications if user is authenticated
   useEffect(() => {
@@ -37,7 +38,6 @@ export default function Navbar() {
   }, [user]);
 
   const handleLogout = async () => {
-    if (!logoutConfirm) { setLogoutConfirm(true); return; }
     await logout();
     toast('Logged out successfully', 'info');
     navigate('/login');
@@ -194,7 +194,7 @@ export default function Navbar() {
             </button>
 
             <button
-              onClick={handleLogout}
+              onClick={() => setLogoutModalOpen(true)}
               style={{
                 background: 'transparent',
                 border: '1px solid var(--border-medium)',
@@ -217,6 +217,62 @@ export default function Navbar() {
 
       <BottomNav />
       <NotifPanel open={notifOpen} onClose={() => setNotifOpen(false)} onRead={() => setUnreadCount(0)} />
+
+      {/* Custom Logout Confirmation Modal */}
+      <Modal
+        open={logoutModalOpen}
+        onClose={() => setLogoutModalOpen(false)}
+        title="Confirm Logout"
+        maxWidth={400}
+      >
+        <div style={{ textAlign: 'center', padding: '0.5rem 0' }}>
+          <div style={{
+            width: 48,
+            height: 48,
+            borderRadius: '50%',
+            background: 'var(--accent-red-dim)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            margin: '0 auto 1rem auto',
+          }}>
+            <FiAlertCircle size={24} color="var(--accent-red)" />
+          </div>
+          <h3 style={{
+            fontFamily: 'Poppins, sans-serif',
+            fontWeight: 600,
+            fontSize: '1.1rem',
+            marginBottom: '0.5rem',
+            color: 'var(--text-primary)',
+          }}>
+            Are you sure?
+          </h3>
+          <p style={{
+            fontFamily: 'Poppins, sans-serif',
+            fontSize: '0.85rem',
+            color: 'var(--text-muted)',
+            marginBottom: '1.5rem',
+          }}>
+            You will be logged out of your account and will need to sign in again to access your data.
+          </p>
+          <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center' }}>
+            <button
+              className="btn btn-outline"
+              onClick={() => setLogoutModalOpen(false)}
+              style={{ fontFamily: 'Poppins, sans-serif' }}
+            >
+              Cancel
+            </button>
+            <button
+              className="btn btn-danger"
+              onClick={handleLogout}
+              style={{ fontFamily: 'Poppins, sans-serif', background: 'var(--text-primary)', color: 'purple'}}
+            >
+              Yes, Logout
+            </button>
+          </div>
+        </div>
+      </Modal>
 
       <style>{`
         @media (max-width: 768px) {
