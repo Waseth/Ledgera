@@ -112,7 +112,6 @@ export default function NotifPanel({ open, onClose, onRead }) {
                     padding: '0.75rem',
                     marginBottom: '0.75rem',
                     background: 'var(--bg-surface)',
-                    borderRadius: 'var(--radius-md)',
                     borderLeft: `3px solid ${n.category === 'danger' ? 'var(--accent-red)' : n.category === 'warning' ? 'var(--accent-amber)' : 'var(--primary-blue)'}`,
                   }}
                 >

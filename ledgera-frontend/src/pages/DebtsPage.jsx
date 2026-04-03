@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { FiDollarSign, FiUsers, FiPackage, FiSearch, FiRefreshCw, FiCheckCircle, FiAlertCircle } from 'react-icons/fi';
+import { motion } from 'framer-motion';
+import { FiDollarSign, FiUsers, FiSearch, FiRefreshCw, FiCheckCircle, FiAlertCircle } from 'react-icons/fi';
 import { api } from '../api/client';
 import { useToast } from '../context/ToastContext';
+import { useAuth } from '../context/AuthContext';
 import Modal from '../components/Modal';
 
 const fmt = n => Number(n || 0).toLocaleString('en-KE', {
@@ -17,6 +18,7 @@ const rowVariant = {
 
 export default function DebtsPage() {
   const { toast } = useToast();
+  const { user } = useAuth();
   const [debts, setDebts] = useState([]);
   const [summary, setSummary] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -150,14 +152,13 @@ export default function DebtsPage() {
         </motion.div>
       )}
 
-      {/* Controls - Search and Refresh on one line, filters below on mobile */}
+      {/* Controls */}
       <div style={{
         display: 'flex',
         flexDirection: 'column',
         gap: '0.65rem',
         marginBottom: '1rem'
       }}>
-        {/* Row 1: Search + Refresh button */}
         <div style={{
           display: 'flex',
           gap: '0.65rem',
@@ -179,7 +180,6 @@ export default function DebtsPage() {
           </button>
         </div>
 
-        {/* Row 2: Filter buttons */}
         <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
           <button
             className={`btn btn-sm ${!showPaid ? 'btn-primary' : 'btn-outline'}`}
@@ -255,7 +255,7 @@ export default function DebtsPage() {
                       </p>
                     </div>
                    </td>
-                </tr>
+                 </tr>
               )}
               {!loading && displayed.map(d => (
                 <motion.tr
@@ -285,7 +285,7 @@ export default function DebtsPage() {
                     </span>
                   </td>
                   <td style={{ whiteSpace: 'nowrap' }}>
-                    {!d.is_paid && (
+                    {!d.is_paid && user?.role === 'shopkeeper' && (
                       <button
                         className="btn btn-primary btn-sm"
                         onClick={() => setConfirm(d.id)}

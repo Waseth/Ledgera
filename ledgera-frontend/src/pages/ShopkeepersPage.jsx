@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { FiUsers, FiUserPlus, FiUserCheck, FiUserX, FiMail, FiCalendar, FiShield, FiEye, FiEyeOff, FiPlus } from 'react-icons/fi';
+import { FiUsers, FiUserPlus, FiUserCheck, FiUserX, FiMail, FiCalendar, FiShield, FiEye, FiEyeOff, FiPlus, FiTrash2 } from 'react-icons/fi';
 import { api } from '../api/client';
 import { useToast } from '../context/ToastContext';
 import { useAuth } from '../context/AuthContext';
@@ -18,6 +18,7 @@ export default function ShopkeepersPage() {
   const [shopkeepers, setShopkeepers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [modal, setModal] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState(null);
   const [form, setForm] = useState({ name: '', email: '', password: '' });
   const [submitting, setSubmitting] = useState(false);
   const [showPwd, setShowPwd] = useState(false);
@@ -26,8 +27,6 @@ export default function ShopkeepersPage() {
     setLoading(true);
     try {
       const data = await api.get('/auth/shopkeepers');
-      console.log('Raw API response:', data); // Debug log
-
       let shopkeepersArray = [];
       if (Array.isArray(data)) {
         shopkeepersArray = data;
@@ -43,11 +42,8 @@ export default function ShopkeepersPage() {
           }
         }
       }
-
-      console.log('Processed shopkeepers:', shopkeepersArray); // Debug log
       setShopkeepers(shopkeepersArray);
     } catch (err) {
-      console.error('Failed to load shopkeepers:', err);
       toast(err.message, 'error');
       setShopkeepers([]);
     } finally {
@@ -79,6 +75,17 @@ export default function ShopkeepersPage() {
       toast(err.message, 'error');
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleDelete = async (id, name) => {
+    try {
+      await api.delete(`/auth/shopkeepers/${id}`);
+      toast(`Shopkeeper "${name}" deleted successfully!`, 'success');
+      setDeleteConfirm(null);
+      load();
+    } catch (err) {
+      toast(err.message, 'error');
     }
   };
 
@@ -151,9 +158,9 @@ export default function ShopkeepersPage() {
 
       {/* Cards grid */}
       {loading ? (
-        <div className="kpi-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '0.875rem' }}>
+        <div className="kpi-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '0.875rem' }}>
           {[...Array(4)].map((_, i) => (
-            <div key={i} className="skeleton" style={{ height: 140, borderRadius: 12 }} />
+            <div key={i} className="skeleton" style={{ height: 180, borderRadius: 12 }} />
           ))}
         </div>
       ) : safeShopkeepers.length === 0 ? (
@@ -170,7 +177,7 @@ export default function ShopkeepersPage() {
         </div>
       ) : (
         <motion.div
-          style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '0.875rem' }}
+          style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '0.875rem' }}
           variants={container}
           initial="hidden"
           animate="show"
@@ -183,7 +190,6 @@ export default function ShopkeepersPage() {
               variants={cardVariant}
               whileHover={{ y: -3, boxShadow: 'var(--shadow-lg)' }}
             >
-              {/* Header with Avatar */}
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.875rem', marginBottom: '1rem' }}>
                 <div style={{
                   width: 48,
@@ -218,7 +224,6 @@ export default function ShopkeepersPage() {
                 </span>
               </div>
 
-              {/* Details */}
               <div style={{ display: 'grid', gap: '0.5rem', marginTop: '0.75rem' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
@@ -237,10 +242,83 @@ export default function ShopkeepersPage() {
                   </span>
                 </div>
               </div>
+
+              {/* Delete Button */}
+              <div style={{ marginTop: '1rem', paddingTop: '0.75rem', borderTop: '1px solid var(--border-subtle)' }}>
+                <button
+                  onClick={() => setDeleteConfirm(s)}
+                  className="btn btn-danger btn-sm"
+                  style={{ width: '100%', fontFamily: 'Poppins, sans-serif', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}
+                >
+                  <FiTrash2 size={14} /> Delete Shopkeeper
+                </button>
+              </div>
             </motion.div>
           ))}
         </motion.div>
       )}
+
+      {/* Delete Confirmation Modal */}
+      <Modal
+        open={!!deleteConfirm}
+        onClose={() => setDeleteConfirm(null)}
+        title="Confirm Delete"
+        maxWidth={400}
+      >
+        {deleteConfirm && (
+          <>
+            <div style={{ textAlign: 'center', padding: '0.5rem 0' }}>
+              <div style={{
+                width: 48,
+                height: 48,
+                borderRadius: '50%',
+                background: 'var(--accent-red-dim)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                margin: '0 auto 1rem auto',
+              }}>
+                <FiTrash2 size={24} color="var(--accent-red)" />
+              </div>
+              <h3 style={{
+                fontFamily: 'Poppins, sans-serif',
+                fontWeight: 600,
+                fontSize: '1.1rem',
+                marginBottom: '0.5rem',
+                color: 'var(--text-primary)',
+              }}>
+                Delete Shopkeeper?
+              </h3>
+              <p style={{
+                fontFamily: 'Poppins, sans-serif',
+                fontSize: '0.85rem',
+                color: 'var(--text-muted)',
+                marginBottom: '1rem',
+              }}>
+                Are you sure you want to delete <strong>{deleteConfirm.name}</strong>?
+                <br />
+                This action cannot be undone.
+              </p>
+              <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center' }}>
+                <button
+                  className="btn btn-outline"
+                  onClick={() => setDeleteConfirm(null)}
+                  style={{ fontFamily: 'Poppins, sans-serif' }}
+                >
+                  Cancel
+                </button>
+                <button
+                  className="btn btn-danger"
+                  onClick={() => handleDelete(deleteConfirm.id, deleteConfirm.name)}
+                  style={{ fontFamily: 'Poppins, sans-serif' }}
+                >
+                  Yes, Delete
+                </button>
+              </div>
+            </div>
+          </>
+        )}
+      </Modal>
 
       {/* Create Shopkeeper Modal */}
       <Modal open={modal} onClose={() => { setModal(false); setForm({ name: '', email: '', password: '' }); }} title="Add Shopkeeper">
@@ -300,7 +378,6 @@ export default function ShopkeepersPage() {
           )}
         </div>
 
-        {/* Role note */}
         <div style={{
           background: 'var(--bg-surface)',
           borderRadius: 6,

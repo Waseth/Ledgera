@@ -16,7 +16,7 @@ const fmt = n => Number(n || 0).toLocaleString('en-KE', {
 const container = { hidden: {}, show: { transition: { staggerChildren: 0.07 } } };
 const item = {
   hidden: { opacity: 0, y: 16 },
-  show:   { opacity: 1, y: 0, transition: { duration: 0.38 } },
+  show: { opacity: 1, y: 0, transition: { duration: 0.38 } },
 };
 
 const TABS = ['Daily', 'Weekly', 'Monthly'];
@@ -145,7 +145,6 @@ export default function ReportsPage() {
       sales: r.sale_count,
     }));
 
-    // Fix the undefined issue by checking if start and end exist
     const dateRange = d.start && d.end ? `${d.start} → ${d.end}` : 'Current Week';
 
     return (
@@ -158,7 +157,6 @@ export default function ReportsPage() {
           { label: 'Total Sales', value: d.sale_count || 0, sub: dateRange },
         ]} />
 
-        {/* Modern Area Chart with Gradient */}
         <motion.div variants={item}>
           <div className="section-header" style={{
             fontFamily: 'Poppins, sans-serif',
@@ -175,17 +173,17 @@ export default function ReportsPage() {
               <ComposedChart data={chartData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
                 <defs>
                   <linearGradient id="revenueGradient" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="var(--accent-teal)" stopOpacity={0.3}/>
-                    <stop offset="95%" stopColor="var(--accent-teal)" stopOpacity={0}/>
+                    <stop offset="5%" stopColor="var(--accent-teal)" stopOpacity={0.3} />
+                    <stop offset="95%" stopColor="var(--accent-teal)" stopOpacity={0} />
                   </linearGradient>
                   <linearGradient id="profitGradient" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="var(--accent-green)" stopOpacity={0.3}/>
-                    <stop offset="95%" stopColor="var(--accent-green)" stopOpacity={0}/>
+                    <stop offset="5%" stopColor="var(--accent-green)" stopOpacity={0.3} />
+                    <stop offset="95%" stopColor="var(--accent-green)" stopOpacity={0} />
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border-subtle)" />
                 <XAxis dataKey="date" tick={{ fontFamily: 'Poppins, sans-serif', fontSize: 11, fill: 'var(--text-muted)' }} />
-                <YAxis tick={{ fontFamily: 'Poppins, sans-serif', fontSize: 10, fill: 'var(--text-muted)' }} tickFormatter={v => `${(v/1000).toFixed(0)}k`} />
+                <YAxis tick={{ fontFamily: 'Poppins, sans-serif', fontSize: 10, fill: 'var(--text-muted)' }} tickFormatter={v => `${(v / 1000).toFixed(0)}k`} />
                 <Tooltip content={<CustomTooltip />} />
                 <Area type="monotone" dataKey="revenue" stroke="var(--accent-teal)" fill="url(#revenueGradient)" strokeWidth={2} />
                 <Area type="monotone" dataKey="profit" stroke="var(--accent-green)" fill="url(#profitGradient)" strokeWidth={2} />
@@ -204,7 +202,6 @@ export default function ReportsPage() {
           </div>
         </motion.div>
 
-        {/* Daily table */}
         <motion.div variants={item}>
           <div className="section-header" style={{
             fontFamily: 'Poppins, sans-serif',
@@ -250,7 +247,6 @@ export default function ReportsPage() {
     if (!data) return null;
     const d = data;
 
-    // Fix the undefined issue by checking if start and end exist
     const dateRange = d.start && d.end ? `${d.start} → ${d.end}` : 'Current Month';
 
     return (
@@ -278,7 +274,6 @@ export default function ReportsPage() {
           { label: 'Total Sales', value: d.sale_count || 0, sub: dateRange },
         ]} />
 
-        {/* Top 5 Products */}
         {d.top_products?.length > 0 && (
           <motion.div variants={item}>
             <div className="section-header" style={{
@@ -341,7 +336,6 @@ export default function ReportsPage() {
               </div>
             </div>
 
-            {/* Top products bar chart */}
             <div className="section-header" style={{
               fontFamily: 'Poppins, sans-serif',
               fontWeight: 700,
@@ -355,16 +349,29 @@ export default function ReportsPage() {
             <div className="chart-container" style={{ padding: '1.25rem' }}>
               <ResponsiveContainer width="100%" height={280}>
                 <BarChart
-                  data={d.top_products.map(p => ({ name: p.name.length > 12 ? p.name.slice(0, 12) + '…' : p.name, revenue: p.revenue, profit: p.profit }))}
+                  data={d.top_products.map(p => ({
+                    name: p.name.length > 12 ? p.name.slice(0, 12) + '…' : p.name,
+                    revenue: p.revenue,
+                    profit: p.profit
+                  }))}
                   layout="vertical"
-                  margin={{ top: 4, right: 16, left: 0, bottom: 0 }}
+                  margin={{ top: 4, right: 30, left: 0, bottom: 0 }}
                 >
                   <CartesianGrid horizontal={false} stroke="var(--border-subtle)" />
-                  <XAxis type="number" tick={{ fontFamily: 'Poppins, sans-serif', fontSize: 10, fill: 'var(--text-muted)' }} tickFormatter={v => `${(v / 1000).toFixed(0)}k`} />
-                  <YAxis type="category" dataKey="name" tick={{ fontFamily: 'Poppins, sans-serif', fontSize: 11, fill: 'var(--text-secondary)' }} width={100} />
-                  <Tooltip contentStyle={{ background: 'var(--bg-card)', border: '1px solid var(--border-medium)', borderRadius: 8, fontFamily: 'Poppins, sans-serif' }} formatter={(v) => `KSh ${fmt(v)}`} />
-                  <Bar dataKey="revenue" fill="var(--accent-teal)" radius={[0, 4, 4, 0]} />
-                  <Bar dataKey="profit" fill="var(--accent-green)" radius={[0, 4, 4, 0]} opacity={0.75} />
+                  <XAxis
+                    type="number"
+                    tick={{ fontFamily: 'Poppins, sans-serif', fontSize: 10, fill: 'var(--text-muted)' }}
+                    tickFormatter={(value) => `KSh ${value.toLocaleString()}`}
+                    width={80}
+                  />
+                  <YAxis
+                    type="category"
+                    dataKey="name"
+                    tick={{ fontFamily: 'Poppins, sans-serif', fontSize: 11, fill: 'var(--text-secondary)' }}
+                    width={100}
+                  />
+                  <Bar dataKey="revenue" fill="var(--accent-teal)" radius={[0, 4, 4, 0]} cursor="default" />
+                  <Bar dataKey="profit" fill="var(--accent-green)" radius={[0, 4, 4, 0]} opacity={0.75} cursor="default" />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -376,7 +383,6 @@ export default function ReportsPage() {
 
   return (
     <div className="page-wrapper">
-      {/* Header */}
       <motion.div
         initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
@@ -391,7 +397,6 @@ export default function ReportsPage() {
         </p>
       </motion.div>
 
-      {/* Tab bar */}
       <div style={{
         display: 'flex',
         gap: 0,
@@ -425,7 +430,6 @@ export default function ReportsPage() {
         ))}
       </div>
 
-      {/* Content */}
       {loading ? (
         <div className="kpi-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '0.875rem' }}>
           {[...Array(5)].map((_, i) => (
@@ -440,7 +444,6 @@ export default function ReportsPage() {
         </>
       )}
 
-      {/* Responsive CSS */}
       <style>{`
         @media (max-width: 768px) {
           .kpi-grid {

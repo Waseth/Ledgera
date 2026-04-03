@@ -45,18 +45,18 @@ export default function Navbar() {
 
   const navLinks = user?.role === 'admin'
     ? [
-        { to: '/dashboard', label: 'Dashboard', icon: FiHome },
-        { to: '/products', label: 'Products', icon: FiBox },
-        { to: '/reports', label: 'Reports', icon: FiPieChart },
-        { to: '/debts', label: 'Debts', icon: FiCreditCard },
-        { to: '/shopkeepers', label: 'Staff', icon: FiUsers },
-      ]
+      { to: '/dashboard', label: 'Dashboard', icon: FiHome },
+      { to: '/products', label: 'Products', icon: FiBox },
+      { to: '/reports', label: 'Reports', icon: FiPieChart },
+      { to: '/debts', label: 'Debts', icon: FiCreditCard },
+      { to: '/shopkeepers', label: 'Staff', icon: FiUsers },
+    ]
     : [
-        { to: '/sales', label: 'Sales', icon: FiShoppingCart },
-        { to: '/products', label: 'Products', icon: FiBox },
-        { to: '/debts', label: 'Debts', icon: FiCreditCard },
-        { to: '/reports', label: 'Reports', icon: FiPieChart },
-      ];
+      { to: '/sales', label: 'Sales', icon: FiShoppingCart },
+      { to: '/products', label: 'Products', icon: FiBox },
+      { to: '/debts', label: 'Debts', icon: FiCreditCard },
+      { to: '/reports', label: 'Reports', icon: FiPieChart },
+    ];
 
   const DesktopNav = () => (
     <div className="desktop-nav" style={{
@@ -266,7 +266,7 @@ export default function Navbar() {
             <button
               className="btn btn-danger"
               onClick={handleLogout}
-              style={{ fontFamily: 'Poppins, sans-serif', background: 'var(--text-primary)', color: 'purple'}}
+              style={{ fontFamily: 'Poppins, sans-serif', background: 'var(--accent-red)', color: '#FFFFFF' }}
             >
               Yes, Logout
             </button>

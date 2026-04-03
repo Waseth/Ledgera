@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { FiPackage, FiX, FiSave } from 'react-icons/fi';
+import { FiPackage, FiSave } from 'react-icons/fi';
 import Modal from './Modal';
 import { api } from '../api/client';
 import { useToast } from '../context/ToastContext';
@@ -142,7 +142,7 @@ export default function ProductModal({ open, onClose, onSuccess }) {
 
       <div className="modal-footer">
         <button
-          className="btn btn-ghost"
+          className="btn btn-outline"
           onClick={onClose}
           disabled={loading}
           style={{ fontFamily: 'Poppins, sans-serif' }}

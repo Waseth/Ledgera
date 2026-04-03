@@ -14,7 +14,7 @@ const fmt = n => Number(n || 0).toLocaleString('en-KE', {
 const container = { hidden: {}, show: { transition: { staggerChildren: 0.04 } } };
 const rowVariant = {
   hidden: { opacity: 0, x: -8 },
-  show:   { opacity: 1, x: 0, transition: { duration: 0.28 } },
+  show: { opacity: 1, x: 0, transition: { duration: 0.28 } },
 };
 
 export default function ProductsPage() {
@@ -129,10 +129,9 @@ export default function ProductsPage() {
         ))}
       </motion.div>
 
+      {/* Low Stock Alert - Notification only, NO RESTOCK BUTTON */}
       {safeLowStock.length > 0 && (
-        <motion.div
-          initial={{ opacity: 0, scaleY: 0.85 }}
-          animate={{ opacity: 1, scaleY: 1 }}
+        <div
           style={{
             background: 'var(--accent-red-dim)',
             border: '1.5px solid var(--accent-red)',
@@ -150,12 +149,7 @@ export default function ProductsPage() {
             {safeLowStock.length} item{safeLowStock.length > 1 ? 's' : ''} need restocking:
             {safeLowStock.map(p => p.name).join(', ')}
           </span>
-          {isAdmin && (
-            <button className="btn btn-sm btn-primary" onClick={() => setModal(true)} style={{ color: '#0F172A' }}>
-              Restock Now
-            </button>
-          )}
-        </motion.div>
+        </div>
       )}
 
       {/* Responsive search and filter section - stacks on mobile */}
@@ -260,8 +254,8 @@ export default function ProductsPage() {
                         </button>
                       )}
                     </div>
-                   </td>
-                 </tr>
+                  </td>
+                </tr>
               )}
               {!loading && displayed.map(p => {
                 const margin = p.selling_price > 0
