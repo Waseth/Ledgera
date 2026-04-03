@@ -287,7 +287,7 @@ async function submitDay() {
   if (res.ok) {
     closeModal('day-overlay');
     if (dayAction === 'close' && data.mismatch !== 0) {
-      alert(`⚠️ Mismatch detected!\nExpected: KSh${fmt(data.expected_cash)}\nActual:   KSh${fmt(data.actual_cash)}\nDiff:     KSh${fmt(data.mismatch)}`);
+      alert(` Mismatch detected!\nExpected: KSh${fmt(data.expected_cash)}\nActual:   KSh${fmt(data.actual_cash)}\nDiff:     KSh${fmt(data.mismatch)}`);
     }
     loadDashboard();
   } else {

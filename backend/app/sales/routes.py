@@ -151,7 +151,7 @@ def log_sale():
             admin_users = User.query.filter_by(role='admin').all()
             product_name = product_row.name
             message = (
-                f"📦 LOW STOCK ALERT!\n"
+                f" LOW STOCK ALERT!\n"
                 f"Product: {product_name}\n"
                 f"Current stock: {new_qty}\n"
                 f"Threshold: {threshold}\n"
