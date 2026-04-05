@@ -4,7 +4,7 @@ import Modal from './Modal';
 import { api } from '../api/client';
 import { useToast } from '../context/ToastContext';
 
-const UNITS = ['piece', 'kg', 'litre', 'packet', 'box', 'bundle', 'pair'];
+const UNITS = ['piece', 'bottle', 'tins', 'packet', 'box', 'bundle', 'pair'];
 
 export default function EditProductModal({ open, onClose, product, onSuccess }) {
   const { toast } = useToast();
