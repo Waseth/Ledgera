@@ -5,7 +5,7 @@ import { api } from '../api/client';
 import { useToast } from '../context/ToastContext';
 import { useAuth } from '../context/AuthContext';
 
-const UNITS = ['piece', 'bottle', 'tins', 'packet', 'box', 'bundle', 'pair'];
+const UNITS = ['piece', 'bottle', 'tins', 'packet', 'box', 'bundle', 'pair','jerrican','roll'];
 
 export default function ProductModal({ open, onClose, onSuccess }) {
   const { toast } = useToast();
