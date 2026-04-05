@@ -28,7 +28,7 @@ def create_app(config_class=Config):
     login_manager.init_app(app)
 
     # Get allowed origins from environment variable or use defaults
-    allowed_origins = os.environ.get("CORS_ORIGINS", "http://localhost:3000,http://localhost:5173,http://localhost:8080").split(",")
+    allowed_origins = os.environ.get("CORS_ORIGINS", "http://localhost:3000,http://localhost:5173,http://localhost:8080,https://ledgerav2.vercel.app").split(",")
 
     # Also add your production frontend URL when deployed
     # allowed_origins.append("https://your-frontend-domain.com")
