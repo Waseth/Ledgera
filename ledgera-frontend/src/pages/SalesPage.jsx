@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import {
   FiShoppingCart, FiPackage, FiUser, FiPhone, FiDollarSign,
-  FiRefreshCw, FiTrendingUp, FiTrendingDown, FiCheckCircle, FiAlertCircle
+  FiRefreshCw, FiTrendingUp
 } from 'react-icons/fi';
 import { api } from '../api/client';
 import { useToast } from '../context/ToastContext';
@@ -23,7 +23,7 @@ export default function SalesPage() {
 
   const [form, setForm] = useState({
     product_id: '',
-    quantity_sold: 1,
+    quantity_sold: '1',
     payment_type: 'cash',
     customer_name: '',
     customer_phone: '',
@@ -59,8 +59,18 @@ export default function SalesPage() {
     if (now - lastSubmit.current < 1500) return;
     lastSubmit.current = now;
 
-    if (!form.product_id) { toast('Select a product.', 'warning'); return; }
-    if (form.quantity_sold < 1) { toast('Quantity must be at least 1.', 'warning'); return; }
+    const quantity = parseInt(form.quantity_sold);
+
+    if (!form.product_id) {
+      toast('Select a product.', 'warning');
+      return;
+    }
+
+    if (!quantity || quantity < 1) {
+      toast('Quantity must be at least 1.', 'warning');
+      return;
+    }
+
     if (form.payment_type === 'debt' && (!form.customer_name.trim() || !form.customer_phone.trim())) {
       toast('Customer name and phone required for debt sales.', 'warning');
       return;
@@ -70,16 +80,26 @@ export default function SalesPage() {
     try {
       const body = {
         product_id: parseInt(form.product_id),
-        quantity_sold: parseInt(form.quantity_sold),
+        quantity_sold: quantity,
         payment_type: form.payment_type,
       };
+
       if (form.payment_type === 'debt') {
         body.customer_name = form.customer_name.trim();
         body.customer_phone = form.customer_phone.trim();
       }
+
       const res = await api.post('/sales', body);
+
       toast(`Sale recorded! KSh ${fmt(res.total_price)}`, 'success');
-      setForm(f => ({ ...f, quantity_sold: 1, customer_name: '', customer_phone: '' }));
+
+      setForm(f => ({
+        ...f,
+        quantity_sold: '1',
+        customer_name: '',
+        customer_phone: ''
+      }));
+
       loadAll();
     } catch (err) {
       toast(err.message, 'error');
@@ -93,6 +113,7 @@ export default function SalesPage() {
 
   return (
     <div className="page-wrapper">
+      {/* Header */}
       <motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -109,11 +130,13 @@ export default function SalesPage() {
         </button>
       </motion.div>
 
+      {/* KPI Cards */}
       <motion.div
         className="kpi-grid"
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ staggerChildren: 0.1 }}
+        style={{ marginBottom: '1.5rem' }}
       >
         <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.1 }}>
           <div className="card stat-card">
@@ -152,16 +175,10 @@ export default function SalesPage() {
         </motion.div>
       </motion.div>
 
-      {/* Responsive grid: stacks on mobile, side by side on desktop */}
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: '1fr 1.5fr',
-        gap: '1.5rem',
-        marginTop: '1.5rem'
-      }}
-      className="sales-grid"
-      >
-        {/* New Sale Card - will be on top on mobile */}
+      {/* Main Grid */}
+      <div className="sales-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1.5fr', gap: '1.5rem', marginTop: '1.5rem' }}>
+
+        {/* New Sale Form */}
         <motion.div
           initial={{ opacity: 0, x: -20 }}
           animate={{ opacity: 1, x: 0 }}
@@ -181,9 +198,10 @@ export default function SalesPage() {
               onChange={e => set('product_id')(e.target.value)}
               style={{ fontFamily: 'Poppins, sans-serif' }}
             >
+              <option value="">Select a product...</option>
               {Array.isArray(products) && products.map(p => (
                 <option key={p.id} value={p.id}>
-                  {p.name} - KSh {p.selling_price} (Stock: {p.quantity})
+                  {p.name} - KSh {p.selling_price} (Stock: {p.quantity} {p.unit})
                 </option>
               ))}
             </select>
@@ -211,7 +229,7 @@ export default function SalesPage() {
               type="number"
               min="1"
               value={form.quantity_sold}
-              onChange={e => set('quantity_sold')(parseInt(e.target.value) || 1)}
+              onChange={e => set('quantity_sold')(e.target.value)}
               style={{ fontFamily: 'Poppins, sans-serif' }}
             />
           </div>
@@ -222,7 +240,7 @@ export default function SalesPage() {
               <button
                 className={`btn ${form.payment_type === 'cash' ? 'btn-primary' : 'btn-outline'}`}
                 onClick={() => set('payment_type')('cash')}
-                style={{ flex: 1, fontFamily: 'Poppins, sans-serif' }}
+                style={{ flex: 1, fontFamily: 'Poppins, sans-serif', color: '#0F172A' }}
               >
                 <FiDollarSign size={14} /> Cash
               </button>
@@ -265,7 +283,7 @@ export default function SalesPage() {
             </motion.div>
           )}
 
-          {selectedProduct && form.quantity_sold > 0 && (
+          {selectedProduct && parseInt(form.quantity_sold) > 0 && (
             <div style={{
               marginTop: '1rem',
               padding: '0.75rem',
@@ -275,12 +293,12 @@ export default function SalesPage() {
             }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
                 <span style={{ fontFamily: 'Poppins, sans-serif' }}>Total Price:</span>
-                <span style={{ fontFamily: 'Poppins, sans-serif', fontWeight: 700 }}>KSh {fmt(selectedProduct.selling_price * form.quantity_sold)}</span>
+                <span style={{ fontFamily: 'Poppins, sans-serif', fontWeight: 700 }}>KSh {fmt(selectedProduct.selling_price * parseInt(form.quantity_sold))}</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                 <span style={{ fontFamily: 'Poppins, sans-serif' }}>Profit:</span>
                 <span style={{ fontFamily: 'Poppins, sans-serif', fontWeight: 700, color: 'var(--accent-green)' }}>
-                  KSh {fmt((selectedProduct.selling_price - selectedProduct.buying_price) * form.quantity_sold)}
+                  KSh {fmt((selectedProduct.selling_price - selectedProduct.buying_price) * parseInt(form.quantity_sold))}
                 </span>
               </div>
             </div>
@@ -290,13 +308,13 @@ export default function SalesPage() {
             className="btn btn-primary"
             onClick={handleSale}
             disabled={loading}
-            style={{ width: '100%', marginTop: '1rem', padding: '0.75rem', fontFamily: 'Poppins, sans-serif' }}
+            style={{ width: '100%', marginTop: '1rem', padding: '0.75rem', fontFamily: 'Poppins, sans-serif', color: '#0F172A' }}
           >
             {loading ? 'Processing...' : 'Record Sale'}
           </button>
         </motion.div>
 
-        {/* Recent Sales Card - scrollable horizontally on mobile */}
+        {/* Recent Sales Table */}
         <motion.div
           initial={{ opacity: 0, x: 20 }}
           animate={{ opacity: 1, x: 0 }}
@@ -308,7 +326,6 @@ export default function SalesPage() {
             <FiPackage size={18} /> Recent Sales
           </h3>
 
-          {/* Scrollable table wrapper */}
           <div style={{
             overflowX: 'auto',
             overflowY: 'visible',
@@ -356,30 +373,12 @@ export default function SalesPage() {
         </motion.div>
       </div>
 
-      {/* Add responsive CSS */}
+      {/* Responsive CSS */}
       <style>{`
         @media (max-width: 768px) {
           .sales-grid {
             grid-template-columns: 1fr !important;
           }
-        }
-
-        /* Dark theme button text colors */
-        [data-theme="dark"] .btn-primary {
-          color: #0F172A !important;
-          background: linear-gradient(135deg, var(--primary-blue), var(--primary-blue-dark));
-        }
-
-        [data-theme="dark"] .btn-primary:hover {
-          color: #0F172A !important;
-        }
-
-        [data-theme="dark"] .btn-outline {
-          color: var(--text-primary);
-        }
-
-        [data-theme="dark"] .btn-outline.btn-primary {
-          color: #0F172A !important;
         }
       `}</style>
     </div>
