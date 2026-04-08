@@ -1,16 +1,16 @@
 import { useState } from 'react';
-import { FiDollarSign, FiPlus, FiX } from 'react-icons/fi';
+import { FiDollarSign, FiPlus, FiX, FiTruck, FiWifi, FiDatabase, FiHome, FiZap, FiMoreHorizontal } from 'react-icons/fi';
 import Modal from './Modal';
 import { api } from '../api/client';
 import { useToast } from '../context/ToastContext';
 
 const EXPENSE_CATEGORIES = [
-  { value: 'transport', label: 'Transport', icon: '🚗' },
-  { value: 'wifi', label: 'WiFi / Internet', icon: '📡' },
-  { value: 'database_hosting', label: 'Database Hosting', icon: '💾' },
-  { value: 'rent', label: 'Rent', icon: '🏠' },
-  { value: 'electricity', label: 'Electricity', icon: '⚡' },
-  { value: 'other', label: 'Other', icon: '📝' }
+  { value: 'transport', label: 'Transport', icon: FiTruck },
+  { value: 'wifi', label: 'WiFi / Internet', icon: FiWifi },
+  { value: 'database_hosting', label: 'Database Hosting', icon: FiDatabase },
+  { value: 'rent', label: 'Rent', icon: FiHome },
+  { value: 'electricity', label: 'Electricity', icon: FiZap },
+  { value: 'other', label: 'Other', icon: FiMoreHorizontal }
 ];
 
 export default function ExpenseModal({ open, onClose, onSuccess }) {
@@ -53,30 +53,35 @@ export default function ExpenseModal({ open, onClose, onSuccess }) {
   };
 
   const selectedCategory = EXPENSE_CATEGORIES.find(c => c.value === form.category);
+  const SelectedIcon = selectedCategory?.icon || FiMoreHorizontal;
 
   return (
     <Modal open={open} onClose={onClose} title="Add Expense">
       <div className="form-group">
         <label className="form-label" style={{ fontFamily: 'Poppins, sans-serif' }}>Category</label>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.5rem', marginBottom: '0.5rem' }}>
-          {EXPENSE_CATEGORIES.map(cat => (
-            <button
-              key={cat.value}
-              type="button"
-              onClick={() => setForm(f => ({ ...f, category: cat.value }))}
-              className={`btn btn-sm ${form.category === cat.value ? 'btn-primary' : 'btn-outline'}`}
-              style={{
-                fontFamily: 'Poppins, sans-serif',
-                justifyContent: 'center',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.5rem',
-                color: form.category === cat.value ? '#0F172A' : undefined
-              }}
-            >
-              <span>{cat.icon}</span> {cat.label}
-            </button>
-          ))}
+          {EXPENSE_CATEGORIES.map(cat => {
+            const Icon = cat.icon;
+            return (
+              <button
+                key={cat.value}
+                type="button"
+                onClick={() => setForm(f => ({ ...f, category: cat.value }))}
+                className={`btn btn-sm ${form.category === cat.value ? 'btn-primary' : 'btn-outline'}`}
+                style={{
+                  fontFamily: 'Poppins, sans-serif',
+                  justifyContent: 'center',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.5rem',
+                  color: form.category === cat.value ? '#0F172A' : undefined
+                }}
+              >
+                <Icon size={14} />
+                {cat.label}
+              </button>
+            );
+          })}
         </div>
       </div>
 

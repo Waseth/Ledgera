@@ -1,11 +1,12 @@
 import { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { FiBox, FiPackage, FiAlertCircle, FiRefreshCw, FiSearch, FiEdit2, FiPlus } from 'react-icons/fi';
+import { FiBox, FiPackage, FiAlertCircle, FiRefreshCw, FiSearch, FiEdit2, FiPlus, FiTrash2 } from 'react-icons/fi';
 import { api } from '../api/client';
 import { useToast } from '../context/ToastContext';
 import { useAuth } from '../context/AuthContext';
 import ProductModal from '../components/ProductModal';
 import EditProductModal from '../components/EditProductModal';
+import Modal from '../components/Modal';
 
 const fmt = n => Number(n || 0).toLocaleString('en-KE', {
   minimumFractionDigits: 2, maximumFractionDigits: 2,
@@ -28,6 +29,7 @@ export default function ProductsPage() {
   const [modal, setModal] = useState(false);
   const [editModal, setEditModal] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState(null);
+  const [deleteConfirm, setDeleteConfirm] = useState(null);
 
   const isAdmin = user?.role === 'admin';
 
@@ -54,6 +56,19 @@ export default function ProductsPage() {
   const handleEdit = (product) => {
     setSelectedProduct(product);
     setEditModal(true);
+  };
+
+  const handleDelete = async () => {
+    if (!deleteConfirm) return;
+
+    try {
+      await api.delete(`/products/${deleteConfirm.id}`);
+      toast(`Product "${deleteConfirm.name}" deleted successfully!`, 'success');
+      setDeleteConfirm(null);
+      load();
+    } catch (err) {
+      toast(err.message, 'error');
+    }
   };
 
   const safeProducts = Array.isArray(products) ? products : [];
@@ -92,7 +107,7 @@ export default function ProductsPage() {
         )}
       </motion.div>
 
-      {/* Responsive KPI Cards that stack on mobile */}
+      {/* Responsive KPI Cards */}
       <motion.div
         className="kpi-grid"
         style={{
@@ -129,7 +144,7 @@ export default function ProductsPage() {
         ))}
       </motion.div>
 
-      {/* Low Stock Alert/}
+      {/* Low Stock Alert */}
       {safeLowStock.length > 0 && (
         <div
           style={{
@@ -152,7 +167,7 @@ export default function ProductsPage() {
         </div>
       )}
 
-      {/* Responsive search and filter section that stacks on mobile */}
+      {/* Responsive search and filter section */}
       <div style={{
         display: 'flex',
         gap: '0.65rem',
@@ -172,26 +187,20 @@ export default function ProductsPage() {
           />
         </div>
         <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
-          {[
-            { key: 'all', label: `All (${safeProducts.length})` },
-            { key: 'low', label: `Low Stock (${safeLowStock.length})` },
-          ].map(f => (
-            <button
-              key={f.key}
-              className={`btn btn-sm ${filter === f.key ? 'btn-primary' : 'btn-outline'}`}
-              onClick={() => setFilter(f.key)}
-              style={{
-                fontFamily: 'Poppins, sans-serif',
-                ...(filter === f.key ? {
-                  background: 'var(--primary-blue)',
-                  borderColor: 'var(--primary-blue)',
-                  color: '#0F172A'
-                } : {})
-              }}
-            >
-              {f.label}
-            </button>
-          ))}
+          <button
+            className={`btn btn-sm ${filter === 'all' ? 'btn-primary' : 'btn-outline'}`}
+            onClick={() => setFilter('all')}
+            style={{ fontFamily: 'Poppins, sans-serif', color: filter === 'all' ? '#0F172A' : undefined }}
+          >
+            All ({safeProducts.length})
+          </button>
+          <button
+            className={`btn btn-sm ${filter === 'low' ? 'btn-primary' : 'btn-outline'}`}
+            onClick={() => setFilter('low')}
+            style={{ fontFamily: 'Poppins, sans-serif', color: filter === 'low' ? '#0F172A' : undefined }}
+          >
+            Low Stock ({safeLowStock.length})
+          </button>
         </div>
         <button className="btn btn-outline btn-sm" onClick={load} style={{ marginLeft: 'auto' }}>
           <FiRefreshCw size={14} /> Refresh
@@ -317,28 +326,16 @@ export default function ProductsPage() {
                         </button>
                         <button
                           className="btn btn-danger btn-sm"
-                          onClick={async () => {
-                            if (window.confirm(`Are you sure you want to delete "${p.name}"? This action cannot be undone.`)) {
-                              try {
-                                await api.delete(`/products/${p.id}`);
-                                toast('Product deleted successfully!', 'success');
-                                load();
-                              } catch (err) {
-                                toast(err.message, 'error');
-                              }
-                            }
-                          }}
+                          onClick={() => setDeleteConfirm(p)}
                           style={{
                             padding: '0.25rem 0.5rem',
                             fontFamily: 'Poppins, sans-serif',
                             display: 'flex',
                             alignItems: 'center',
-                            gap: '0.25rem',
-                            background: '#EF4444',
-                            color: 'white'
+                            gap: '0.25rem'
                           }}
                         >
-                          Delete
+                          <FiTrash2 size={12} /> Delete
                         </button>
                       </td>
                     )}
@@ -358,24 +355,76 @@ export default function ProductsPage() {
         onSuccess={load}
       />
 
-  
+      {/* Custom Delete Confirmation Modal */}
+      <Modal
+        open={!!deleteConfirm}
+        onClose={() => setDeleteConfirm(null)}
+        title="Confirm Delete"
+        maxWidth={400}
+      >
+        {deleteConfirm && (
+          <div style={{ textAlign: 'center', padding: '0.5rem 0' }}>
+            <div style={{
+              width: 48,
+              height: 48,
+              borderRadius: '50%',
+              background: 'var(--accent-red-dim)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              margin: '0 auto 1rem auto',
+            }}>
+              <FiTrash2 size={24} color="var(--accent-red)" />
+            </div>
+            <h3 style={{
+              fontFamily: 'Poppins, sans-serif',
+              fontWeight: 600,
+              fontSize: '1.1rem',
+              marginBottom: '0.5rem',
+              color: 'var(--text-primary)',
+            }}>
+              Delete Product?
+            </h3>
+            <p style={{
+              fontFamily: 'Poppins, sans-serif',
+              fontSize: '0.85rem',
+              color: 'var(--text-muted)',
+              marginBottom: '0.5rem',
+            }}>
+              Are you sure you want to delete <strong style={{ color: 'var(--accent-red)' }}>{deleteConfirm.name}</strong>?
+            </p>
+            <p style={{
+              fontFamily: 'Poppins, sans-serif',
+              fontSize: '0.75rem',
+              color: 'var(--text-muted)',
+              marginBottom: '1.5rem',
+            }}>
+              This action cannot be undone. The product will be permanently removed from inventory.
+            </p>
+            <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center' }}>
+              <button
+                className="btn btn-outline"
+                onClick={() => setDeleteConfirm(null)}
+                style={{ fontFamily: 'Poppins, sans-serif' }}
+              >
+                Cancel
+              </button>
+              <button
+                className="btn btn-danger"
+                onClick={handleDelete}
+                style={{ fontFamily: 'Poppins, sans-serif' }}
+              >
+                Yes, Delete
+              </button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
       <style>{`
         @media (max-width: 768px) {
           .kpi-grid {
             grid-template-columns: 1fr !important;
-          }
-
-          .search-filter-row {
-            flex-direction: column !important;
-            align-items: stretch !important;
-          }
-
-          .search-filter-row > div:first-child {
-            max-width: 100% !important;
-          }
-
-          .btn-outline.btn-sm {
-            margin-left: 0 !important;
           }
         }
       `}</style>

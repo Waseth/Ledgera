@@ -2,7 +2,8 @@ import { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import {
   FiDollarSign, FiTrendingUp, FiTrendingDown, FiActivity,
-  FiRefreshCw, FiPlus, FiAlertCircle, FiPackage, FiCalendar, FiClock, FiDollarSign as FiExpense
+  FiRefreshCw, FiPlus, FiAlertCircle, FiPackage, FiCalendar, FiClock, FiDollarSign as FiExpense,
+  FiTruck, FiWifi, FiDatabase, FiHome, FiZap, FiMoreHorizontal
 } from 'react-icons/fi';
 import {
   AreaChart, Area, BarChart, Bar, LineChart, Line,
@@ -39,6 +40,25 @@ const CustomTooltip = ({ active, payload, label }) => {
     );
   }
   return null;
+};
+
+// Helper function to get expense icon based on category
+const getExpenseIcon = (category, size = 16, color = '#EF4444') => {
+  const iconProps = { size, color, style: { flexShrink: 0 } };
+  switch (category) {
+    case 'transport':
+      return <FiTruck {...iconProps} />;
+    case 'wifi':
+      return <FiWifi {...iconProps} />;
+    case 'database_hosting':
+      return <FiDatabase {...iconProps} />;
+    case 'rent':
+      return <FiHome {...iconProps} />;
+    case 'electricity':
+      return <FiZap {...iconProps} />;
+    default:
+      return <FiMoreHorizontal {...iconProps} />;
+  }
 };
 
 export default function Dashboard() {
@@ -281,13 +301,7 @@ export default function Dashboard() {
                 }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  <span style={{ fontSize: '1rem' }}>
-                    {expense.category === 'transport' ? '🚗' :
-                     expense.category === 'wifi' ? '📡' :
-                     expense.category === 'database_hosting' ? '💾' :
-                     expense.category === 'rent' ? '🏠' :
-                     expense.category === 'electricity' ? '⚡' : '📝'}
-                  </span>
+                  {getExpenseIcon(expense.category, 18, '#EF4444')}
                   <div>
                     <div style={{ fontFamily: 'Poppins, sans-serif', fontSize: '0.85rem', fontWeight: 500 }}>
                       {expense.description}
