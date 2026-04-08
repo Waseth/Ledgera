@@ -92,7 +92,7 @@ export default function ProductsPage() {
         )}
       </motion.div>
 
-      {/* Responsive KPI Cards - stack on mobile */}
+      {/* Responsive KPI Cards that stack on mobile */}
       <motion.div
         className="kpi-grid"
         style={{
@@ -129,7 +129,7 @@ export default function ProductsPage() {
         ))}
       </motion.div>
 
-      {/* Low Stock Alert - Notification only, NO RESTOCK BUTTON */}
+      {/* Low Stock Alert/}
       {safeLowStock.length > 0 && (
         <div
           style={{
@@ -152,7 +152,7 @@ export default function ProductsPage() {
         </div>
       )}
 
-      {/* Responsive search and filter section - stacks on mobile */}
+      {/* Responsive search and filter section that stacks on mobile */}
       <div style={{
         display: 'flex',
         gap: '0.65rem',
@@ -301,7 +301,7 @@ export default function ProductsPage() {
                       {fmt(p.selling_price * p.quantity)}
                     </td>
                     {isAdmin && (
-                      <td style={{ whiteSpace: 'nowrap' }}>
+                      <td style={{ whiteSpace: 'nowrap', display: 'flex', gap: '0.5rem' }}>
                         <button
                           className="btn btn-outline btn-sm"
                           onClick={() => handleEdit(p)}
@@ -314,6 +314,31 @@ export default function ProductsPage() {
                           }}
                         >
                           <FiEdit2 size={12} /> Edit
+                        </button>
+                        <button
+                          className="btn btn-danger btn-sm"
+                          onClick={async () => {
+                            if (window.confirm(`Are you sure you want to delete "${p.name}"? This action cannot be undone.`)) {
+                              try {
+                                await api.delete(`/products/${p.id}`);
+                                toast('Product deleted successfully!', 'success');
+                                load();
+                              } catch (err) {
+                                toast(err.message, 'error');
+                              }
+                            }
+                          }}
+                          style={{
+                            padding: '0.25rem 0.5rem',
+                            fontFamily: 'Poppins, sans-serif',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '0.25rem',
+                            background: '#EF4444',
+                            color: 'white'
+                          }}
+                        >
+                          Delete
                         </button>
                       </td>
                     )}
@@ -333,7 +358,7 @@ export default function ProductsPage() {
         onSuccess={load}
       />
 
-      {/* Add responsive CSS */}
+  
       <style>{`
         @media (max-width: 768px) {
           .kpi-grid {

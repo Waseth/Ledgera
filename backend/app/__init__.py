@@ -11,6 +11,7 @@ from config import Config
 from app.extensions import db, login_manager, cors
 
 
+
 def create_app(config_class=Config):
     app = Flask(__name__)
     app.config.from_object(config_class)
@@ -71,7 +72,9 @@ def create_app(config_class=Config):
     from app.debts.routes import debts_bp
     from app.reports.routes import reports_bp
     from app.notifications.routes import notifications_bp
+    from app.expenses.routes import expenses_bp
 
+    app.register_blueprint(expenses_bp, url_prefix="/expenses")
     app.register_blueprint(auth_bp, url_prefix="/auth")
     app.register_blueprint(products_bp, url_prefix="/products")
     app.register_blueprint(sales_bp, url_prefix="/sales")

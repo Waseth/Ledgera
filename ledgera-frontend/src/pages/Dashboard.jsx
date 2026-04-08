@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import {
   FiDollarSign, FiTrendingUp, FiTrendingDown, FiActivity,
-  FiRefreshCw, FiPlus, FiAlertCircle, FiPackage, FiCalendar
+  FiRefreshCw, FiPlus, FiAlertCircle, FiPackage, FiCalendar, FiClock, FiDollarSign as FiExpense
 } from 'react-icons/fi';
 import {
   AreaChart, Area, BarChart, Bar, LineChart, Line,
@@ -12,6 +12,7 @@ import {
 import { api } from '../api/client';
 import { useToast } from '../context/ToastContext';
 import ProductModal from '../components/ProductModal';
+import ExpenseModal from '../components/ExpenseModal';
 
 const fmt = n => Number(n || 0).toLocaleString('en-KE', {
   minimumFractionDigits: 2, maximumFractionDigits: 2,
@@ -47,23 +48,35 @@ export default function Dashboard() {
   const [dailyReport, setDailyReport] = useState(null);
   const [monthlyReport, setMonthlyReport] = useState(null);
   const [lowStockProducts, setLowStockProducts] = useState([]);
+  const [recentExpenses, setRecentExpenses] = useState([]);
+  const [totalExpenses, setTotalExpenses] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [prodModal, setProdModal] = useState(false);
+  const [expenseModal, setExpenseModal] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [dash, wk, daily, monthly, low] = await Promise.all([
+      const [dash, wk, daily, monthly, low, expenses] = await Promise.all([
         api.get('/reports/dashboard'),
         api.get('/reports/weekly'),
         api.get('/reports/daily'),
         api.get('/reports/monthly'),
         api.get('/products/low-stock'),
+        api.get('/expenses'),
       ]);
       setData(dash);
       setWeekly(wk);
       setDailyReport(daily);
       setMonthlyReport(monthly);
       setLowStockProducts(Array.isArray(low) ? low : []);
+      setRecentExpenses(Array.isArray(expenses) ? expenses.slice(0, 5) : []);
+
+      // Calculate total expenses for today
+      const todayTotal = Array.isArray(expenses)
+        ? expenses.reduce((sum, e) => sum + e.amount, 0)
+        : 0;
+      setTotalExpenses(todayTotal);
     } catch (err) {
       toast(err.message, 'error');
     } finally {
@@ -94,7 +107,6 @@ export default function Dashboard() {
   const todayStr = new Date().toISOString().split('T')[0];
   const todayIndex = chartData.findIndex(d => d.fullDate === todayStr);
 
-  // Expected cash = total cash sales
   const todayExpectedCash = dailyReport?.cash_revenue || 0;
   const weekExpectedCash = weekly?.total_revenue || 0;
   const monthExpectedCash = monthlyReport?.total_revenue || 0;
@@ -113,9 +125,17 @@ export default function Dashboard() {
             {new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
           </p>
         </div>
-        <button className="btn btn-outline btn-sm" onClick={load}>
-          <FiRefreshCw size={14} /> Refresh
-        </button>
+        <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+          <button className="btn btn-outline btn-sm" onClick={load}>
+            <FiRefreshCw size={14} /> Refresh
+          </button>
+          <button className="btn btn-secondary btn-sm" onClick={() => setExpenseModal(true)} style={{ color: '#0F172A' }}>
+            <FiExpense size={14} /> Add Expense
+          </button>
+          <button className="btn btn-primary btn-sm" onClick={() => setProdModal(true)} style={{ color: '#0F172A' }}>
+            <FiPlus size={14} /> Add Product
+          </button>
+        </div>
       </motion.div>
 
       {/* Expected Cash Summary Cards */}
@@ -186,15 +206,29 @@ export default function Dashboard() {
           <div className="card stat-card">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
               <div>
-                <div className="stat-label" style={{ fontFamily: 'Poppins, sans-serif' }}>Today's Profit</div>
-                <div className="stat-value" style={{ fontFamily: 'Poppins, sans-serif' }}>KSh {fmt(data?.today?.net_profit)}</div>
+                <div className="stat-label" style={{ fontFamily: 'Poppins, sans-serif' }}>Today's Expenses</div>
+                <div className="stat-value" style={{ fontFamily: 'Poppins, sans-serif', color: '#EF4444' }}>KSh {fmt(totalExpenses)}</div>
               </div>
-              <FiTrendingUp size={28} color="#F59E0B" style={{ opacity: 0.7 }} />
+              <FiExpense size={28} color="#EF4444" style={{ opacity: 0.7 }} />
             </div>
           </div>
         </motion.div>
 
         <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.3 }}>
+          <div className="card stat-card">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+              <div>
+                <div className="stat-label" style={{ fontFamily: 'Poppins, sans-serif' }}>Today's Net Profit</div>
+                <div className="stat-value" style={{ fontFamily: 'Poppins, sans-serif', color: (data?.today?.net_profit - totalExpenses) >= 0 ? '#10B981' : '#EF4444' }}>
+                  KSh {fmt((data?.today?.net_profit || 0) - totalExpenses)}
+                </div>
+              </div>
+              <FiTrendingUp size={28} color={(data?.today?.net_profit - totalExpenses) >= 0 ? '#10B981' : '#EF4444'} style={{ opacity: 0.7 }} />
+            </div>
+          </div>
+        </motion.div>
+
+        <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.4 }}>
           <div className="card stat-card">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
               <div>
@@ -206,7 +240,7 @@ export default function Dashboard() {
           </div>
         </motion.div>
 
-        <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.4 }}>
+        <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.5 }}>
           <div className="card stat-card">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
               <div>
@@ -219,11 +253,64 @@ export default function Dashboard() {
         </motion.div>
       </motion.div>
 
+      {/* Recent Expenses Section */}
+      {recentExpenses.length > 0 && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.55 }}
+          className="card"
+          style={{ padding: '1.25rem', marginBottom: '1.5rem' }}
+        >
+          <h3 style={{ fontFamily: 'Poppins, sans-serif', fontSize: '0.9rem', fontWeight: 600, marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <FiExpense size={16} /> Recent Expenses
+          </h3>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+            {recentExpenses.map(expense => (
+              <div
+                key={expense.id}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  padding: '0.5rem 0.75rem',
+                  background: 'var(--bg-surface)',
+                  borderRadius: 'var(--radius-md)',
+                  flexWrap: 'wrap',
+                  gap: '0.5rem'
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <span style={{ fontSize: '1rem' }}>
+                    {expense.category === 'transport' ? '🚗' :
+                     expense.category === 'wifi' ? '📡' :
+                     expense.category === 'database_hosting' ? '💾' :
+                     expense.category === 'rent' ? '🏠' :
+                     expense.category === 'electricity' ? '⚡' : '📝'}
+                  </span>
+                  <div>
+                    <div style={{ fontFamily: 'Poppins, sans-serif', fontSize: '0.85rem', fontWeight: 500 }}>
+                      {expense.description}
+                    </div>
+                    <div style={{ fontFamily: 'Poppins, sans-serif', fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+                      {new Date(expense.timestamp).toLocaleDateString()}
+                    </div>
+                  </div>
+                </div>
+                <div style={{ fontFamily: 'Poppins, sans-serif', fontSize: '0.85rem', fontWeight: 600, color: '#EF4444' }}>
+                  KSh {fmt(expense.amount)}
+                </div>
+              </div>
+            ))}
+          </div>
+        </motion.div>
+      )}
+
       {/* Revenue & Profit Chart */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.5 }}
+        transition={{ delay: 0.6 }}
         className="chart-container"
         style={{ marginTop: '1.5rem' }}
       >
@@ -328,6 +415,9 @@ export default function Dashboard() {
           </div>
         </motion.div>
       )}
+
+      <ProductModal open={prodModal} onClose={() => setProdModal(false)} onSuccess={load} />
+      <ExpenseModal open={expenseModal} onClose={() => setExpenseModal(false)} onSuccess={load} />
     </div>
   );
 }

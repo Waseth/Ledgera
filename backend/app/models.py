@@ -86,9 +86,6 @@ class Sale(db.Model):
         return f"<Sale id={self.id} product_id={self.product_id}>"
 
 
-# ---------------------------------------------------------------------------
-# Expense (No day_id anymore - expenses are independent)
-# ---------------------------------------------------------------------------
 class Expense(db.Model):
     __tablename__ = "expenses"
 
@@ -96,6 +93,7 @@ class Expense(db.Model):
     user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
     description = db.Column(db.String(200), nullable=False)
     amount = db.Column(db.Float, nullable=False)
+    category = db.Column(db.String(50), default="other")  # Add this line
     timestamp = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
     __table_args__ = (
