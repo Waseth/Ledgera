@@ -25,7 +25,7 @@ def generate_token(user_id, email, role):
         'user_id': user_id,
         'email': email,
         'role': role,
-        'exp': datetime.utcnow() + timedelta(hours=current_app.config.get('JWT_EXPIRATION_HOURS', 24)),
+        'exp': datetime.utcnow() + timedelta(hours=current_app.config.get('JWT_EXPIRATION_HOURS', 168)),
         'iat': datetime.utcnow()
     }
     token = jwt.encode(payload, current_app.config['JWT_SECRET_KEY'], algorithm='HS256')
@@ -141,6 +141,26 @@ def verify_token():
     return jsonify({
         "valid": True,
         "user": request.user_payload
+    }), 200
+
+
+@auth_bp.route("/refresh", methods=["POST"])
+@token_required
+def refresh_token():
+    """
+    Refresh an expired or about-to-expire token.
+    Returns a new JWT token with extended expiration.
+    """
+    user_id = request.user_payload.get('user_id')
+    email = request.user_payload.get('email')
+    role = request.user_payload.get('role')
+
+    # Generate new token with fresh expiration
+    new_token = generate_token(user_id, email, role)
+
+    return jsonify({
+        "token": new_token,
+        "message": "Token refreshed successfully"
     }), 200
 
 
