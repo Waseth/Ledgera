@@ -622,6 +622,101 @@ def weekly_page():
 def monthly_page():
     return _simple_report_html("Monthly Report", "monthly"), 200
 
+# ---------------------------------------------------------------------------
+# GET /reports/weekly-by-month  – weekly breakdown for a specific month
+# ---------------------------------------------------------------------------
+@reports_bp.route("/weekly-by-month", methods=["GET"])
+@token_required
+def weekly_by_month():
+    """
+    Returns weekly breakdown for a specific month.
+    Query params: month=YYYY-MM (default: current month)
+    Returns weeks 1, 2, 3, 4 with their totals.
+    """
+    from calendar import monthrange
+    from datetime import date, timedelta
+
+    month_str = request.args.get("month")
+
+    try:
+        if month_str:
+            year, mon = [int(x) for x in month_str.split("-")]
+        else:
+            today = date.today()
+            year, mon = today.year, today.month
+
+        # Get first and last day of month
+        start = date(year, mon, 1)
+        last_day = monthrange(year, mon)[1]
+        end = date(year, mon, last_day)
+
+    except (ValueError, TypeError):
+        today = date.today()
+        year, mon = today.year, today.month
+        start = date(year, mon, 1)
+        last_day = monthrange(year, mon)[1]
+        end = date(year, mon, last_day)
+
+    # Calculate week boundaries
+    weeks = []
+
+    # Week 1: Days 1-7
+    week1_start = start
+    week1_end = date(year, mon, min(7, last_day))
+
+    # Week 2: Days 8-14
+    week2_start = date(year, mon, 8) if last_day >= 8 else None
+    week2_end = date(year, mon, min(14, last_day)) if last_day >= 8 else None
+
+    # Week 3: Days 15-21
+    week3_start = date(year, mon, 15) if last_day >= 15 else None
+    week3_end = date(year, mon, min(21, last_day)) if last_day >= 15 else None
+
+    # Week 4: Days 22-28
+    week4_start = date(year, mon, 22) if last_day >= 22 else None
+    week4_end = date(year, mon, min(28, last_day)) if last_day >= 22 else None
+
+    # Week 5: Days 29-end (if exists)
+    week5_start = date(year, mon, 29) if last_day >= 29 else None
+    week5_end = end if last_day >= 29 else None
+
+    weeks_config = [
+        {"week": 1, "start": week1_start, "end": week1_end, "name": "Week 1"},
+        {"week": 2, "start": week2_start, "end": week2_end, "name": "Week 2"},
+        {"week": 3, "start": week3_start, "end": week3_end, "name": "Week 3"},
+        {"week": 4, "start": week4_start, "end": week4_end, "name": "Week 4"},
+    ]
+
+    if week5_start:
+        weeks_config.append({"week": 5, "start": week5_start, "end": week5_end, "name": "Week 5"})
+
+    weekly_data = []
+    for w in weeks_config:
+        if w["start"] and w["end"]:
+            agg = _sales_aggregates(w["start"], w["end"])
+            expenses = _expenses_total(w["start"], w["end"])
+            net_profit = round(agg.profit - expenses, 2)
+
+            weekly_data.append({
+                "week": w["week"],
+                "week_name": w["name"],
+                "start": w["start"].isoformat(),
+                "end": w["end"].isoformat(),
+                "total_revenue": round(agg.revenue, 2),
+                "total_profit": round(agg.profit, 2),
+                "cash_revenue": round(agg.cash_revenue, 2),
+                "debt_revenue": round(agg.debt_revenue, 2),
+                "total_expenses": round(expenses, 2),
+                "net_profit": net_profit,
+                "sale_count": agg.count
+            })
+
+    return jsonify({
+        "month": f"{year}-{mon:02d}",
+        "month_name": date(year, mon, 1).strftime("%B %Y"),
+        "weeks": weekly_data
+    }), 200
+
 
 def _simple_report_html(title, endpoint):
     return f"""<!DOCTYPE html>
