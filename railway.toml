@@ -5,9 +5,9 @@ builder = "NIXPACKS"
 # Tell Railway to look in the backend folder
 context = "backend"
 
-[deploy]
-# Start the app from the backend folder
-startCommand = "cd backend && gunicorn 'app:create_app()'"
 
+# Start the app from the backend folder
+[deploy]
+startCommand = "cd backend && gunicorn 'app:create_app()' --workers 1 --threads 1 --max-requests=500 --max-requests-jitter=100"
 [env]
 DB_TYPE = "mysql"
