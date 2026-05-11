@@ -144,30 +144,20 @@ def log_sale():
             details=f"sale_id={sale.id} product_id={product_id} qty={quantity_sold} type={payment_type}",
         ))
 
-        # 5. Low-stock notification
+        # 5. Low-stock notification (SINGLE NOTIFICATION - short format only)
         new_qty = product_row.quantity - quantity_sold
         threshold = current_app.config.get("LOW_STOCK_THRESHOLD", 5)
         if new_qty <= threshold:
             admin_users = User.query.filter_by(role='admin').all()
             product_name = product_row.name
-            message = (
-                f" LOW STOCK ALERT!\n"
-                f"Product: {product_name}\n"
-                f"Current stock: {new_qty}\n"
-                f"Threshold: {threshold}\n"
-                f"Please restock soon!"
-            )
+            # Short format message only
+            message = f"⚠️ Low stock: {product_name} has only {new_qty} units left!"
             for admin in admin_users:
                 db.session.add(Notification(
                     user_id=admin.id,
                     message=message,
                     category="warning",
                 ))
-            # db.session.add(Notification(
-            #     user_id=None,
-            #     message=f"⚠️ Low stock: {product_name} has only {new_qty} units left!",
-            #     category="warning",
-            # ))
 
         db.session.commit()
 
@@ -286,7 +276,7 @@ def _sales_html():
   <div class="card" style="margin-top:1.5rem; max-width:700px">
     <h2>Today's Sales</h2>
     <table id="sales-table">
-      <thead><tr><th>Product</th><th>Qty</th><th>Total</th><th>Profit</th><th>Type</th><th>Time</th></tr></thead>
+      <thead><table><th>Product</th><th>Qty</th><th>Total</th><th>Profit</th><th>Type</th><th>Time</th></tr></thead>
       <tbody></tbody>
     </table>
   </div>
@@ -308,7 +298,7 @@ def _sales_html():
       const sales = await res.json();
       const tbody = document.querySelector('#sales-table tbody');
       tbody.innerHTML = sales.map(s =>
-        `<tr><td>${s.product_name}</td><td>${s.quantity_sold}</td>
+        `<tr><td>${s.product_name}<tr><td>${s.quantity_sold}</td>
           <td>KSh${s.total_price}</td><td>KSh${s.profit}</td>
           <td>${s.payment_type}</td><td>${s.timestamp.substring(11,16)}</td></tr>`
       ).join('') || '<tr><td colspan="6" style="color:#888">No sales yet today.</td></tr>';
