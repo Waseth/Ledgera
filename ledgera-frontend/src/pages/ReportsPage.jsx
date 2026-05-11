@@ -8,6 +8,7 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   ComposedChart, ReferenceLine
 } from 'recharts';
+import MonthlyComparison from '../components/MonthlyComparison';
 
 const fmt = n => Number(n || 0).toLocaleString('en-KE', {
   minimumFractionDigits: 2, maximumFractionDigits: 2,
@@ -429,6 +430,9 @@ export default function ReportsPage() {
           </button>
         ))}
       </div>
+
+      {/* Monthly Comparison Component */}
+      <MonthlyComparison />
 
       {loading ? (
         <div className="kpi-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '0.875rem' }}>

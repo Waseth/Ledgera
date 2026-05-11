@@ -163,11 +163,11 @@ def log_sale():
                     message=message,
                     category="warning",
                 ))
-            db.session.add(Notification(
-                user_id=None,
-                message=f"⚠️ Low stock: {product_name} has only {new_qty} units left!",
-                category="warning",
-            ))
+            # db.session.add(Notification(
+            #     user_id=None,
+            #     message=f"⚠️ Low stock: {product_name} has only {new_qty} units left!",
+            #     category="warning",
+            # ))
 
         db.session.commit()
 

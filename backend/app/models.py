@@ -93,7 +93,7 @@ class Expense(db.Model):
     user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
     description = db.Column(db.String(200), nullable=False)
     amount = db.Column(db.Float, nullable=False)
-    category = db.Column(db.String(50), default="other")  # Add this line
+    category = db.Column(db.String(50), default="other")
     timestamp = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
     __table_args__ = (
@@ -170,3 +170,31 @@ class AuditLog(db.Model):
 
     def __repr__(self):
         return f"<AuditLog {self.action} by user_id={self.user_id}>"
+
+
+# ---------------------------------------------------------------------------
+# MonthlySnapshot – Stores monthly totals for historical comparison
+# ---------------------------------------------------------------------------
+class MonthlySnapshot(db.Model):
+    __tablename__ = "monthly_snapshots"
+
+    id = db.Column(db.Integer, primary_key=True)
+    year = db.Column(db.Integer, nullable=False)
+    month = db.Column(db.Integer, nullable=False)  # 1-12
+    total_revenue = db.Column(db.Float, default=0.0)
+    total_profit = db.Column(db.Float, default=0.0)
+    cash_revenue = db.Column(db.Float, default=0.0)
+    debt_revenue = db.Column(db.Float, default=0.0)
+    total_expenses = db.Column(db.Float, default=0.0)
+    net_profit = db.Column(db.Float, default=0.0)
+    sale_count = db.Column(db.Integer, default=0)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    __table_args__ = (
+        db.UniqueConstraint('year', 'month', name='unique_year_month'),
+        Index('idx_monthly_snapshot_date', 'year', 'month'),
+    )
+
+    def __repr__(self):
+        return f"<MonthlySnapshot {self.year}-{self.month:02d}>"

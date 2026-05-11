@@ -4,6 +4,7 @@ import { FiBox, FiPackage, FiAlertCircle, FiRefreshCw, FiSearch, FiEdit2, FiPlus
 import { api } from '../api/client';
 import { useToast } from '../context/ToastContext';
 import { useAuth } from '../context/AuthContext';
+
 import ProductModal from '../components/ProductModal';
 import EditProductModal from '../components/EditProductModal';
 import Modal from '../components/Modal';

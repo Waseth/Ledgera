@@ -8,7 +8,7 @@ from sqlalchemy import func
 
 from app.reports import reports_bp
 from app.extensions import db
-from app.models import Sale, Expense, Debt, Product, Notification
+from app.models import Sale, Expense, Debt, Product, Notification, MonthlySnapshot
 from app.reports.dashboard_html import ADMIN_DASHBOARD_HTML
 from app.auth.routes import token_required
 
@@ -58,6 +58,56 @@ def _expenses_total(start: date, end: date):
         db.func.date(Expense.timestamp) >= start,
         db.func.date(Expense.timestamp) <= end
     ).scalar()
+
+
+# ---------------------------------------------------------------------------
+# Monthly Snapshot Helpers
+# ---------------------------------------------------------------------------
+
+def save_monthly_snapshot(year, month):
+    """Calculate and save monthly totals to snapshots table."""
+    # Calculate date range
+    start = date(year, month, 1)
+    if month == 12:
+        end = date(year + 1, 1, 1) - timedelta(days=1)
+    else:
+        end = date(year, month + 1, 1) - timedelta(days=1)
+
+    # Get aggregates
+    agg = _sales_aggregates(start, end)
+    expenses = _expenses_total(start, end)
+    net_profit = round(agg.profit - expenses, 2)
+
+    # Check if snapshot exists
+    snapshot = MonthlySnapshot.query.filter_by(year=year, month=month).first()
+
+    if snapshot:
+        # Update existing
+        snapshot.total_revenue = agg.revenue
+        snapshot.total_profit = agg.profit
+        snapshot.cash_revenue = agg.cash_revenue
+        snapshot.debt_revenue = agg.debt_revenue
+        snapshot.total_expenses = expenses
+        snapshot.net_profit = net_profit
+        snapshot.sale_count = agg.count
+        snapshot.updated_at = datetime.utcnow()
+    else:
+        # Create new
+        snapshot = MonthlySnapshot(
+            year=year,
+            month=month,
+            total_revenue=agg.revenue,
+            total_profit=agg.profit,
+            cash_revenue=agg.cash_revenue,
+            debt_revenue=agg.debt_revenue,
+            total_expenses=expenses,
+            net_profit=net_profit,
+            sale_count=agg.count
+        )
+        db.session.add(snapshot)
+
+    db.session.commit()
+    return snapshot
 
 
 # ---------------------------------------------------------------------------
@@ -139,6 +189,8 @@ def weekly_report():
 @token_required
 def monthly_report():
     month_str = request.args.get("month")
+    save_to_db = request.args.get("save", "true").lower() == "true"
+
     try:
         if month_str:
             year, mon = [int(x) for x in month_str.split("-")]
@@ -154,10 +206,15 @@ def monthly_report():
         today = date.today()
         start = date(today.year, today.month, 1)
         end = today
+        year, mon = start.year, start.month
 
     agg = _sales_aggregates(start, end)
     expenses = _expenses_total(start, end)
     net_profit = round(agg.profit - expenses, 2)
+
+    # Save snapshot for future comparison
+    if save_to_db:
+        save_monthly_snapshot(year, mon)
 
     top_products = (
         db.session.query(
@@ -197,6 +254,102 @@ def monthly_report():
             }
             for r in top_products
         ],
+    }), 200
+
+
+# ---------------------------------------------------------------------------
+# GET /reports/monthly/history  – get all saved monthly snapshots
+# ---------------------------------------------------------------------------
+@reports_bp.route("/monthly/history", methods=["GET"])
+@token_required
+def monthly_history():
+    """Get all saved monthly snapshots for comparison."""
+    snapshots = MonthlySnapshot.query.order_by(
+        MonthlySnapshot.year.desc(),
+        MonthlySnapshot.month.desc()
+    ).all()
+
+    return jsonify([
+        {
+            "id": s.id,
+            "year": s.year,
+            "month": s.month,
+            "month_name": datetime(s.year, s.month, 1).strftime("%B %Y"),
+            "total_revenue": round(s.total_revenue, 2),
+            "total_profit": round(s.total_profit, 2),
+            "cash_revenue": round(s.cash_revenue, 2),
+            "debt_revenue": round(s.debt_revenue, 2),
+            "total_expenses": round(s.total_expenses, 2),
+            "net_profit": round(s.net_profit, 2),
+            "sale_count": s.sale_count,
+            "created_at": s.created_at.isoformat()
+        }
+        for s in snapshots
+    ]), 200
+
+
+# ---------------------------------------------------------------------------
+# GET /reports/monthly/compare  – compare two months
+# ---------------------------------------------------------------------------
+@reports_bp.route("/monthly/compare", methods=["GET"])
+@token_required
+def compare_months():
+    """
+    Compare two months.
+    Query params: month1=YYYY-MM, month2=YYYY-MM
+    """
+    month1_str = request.args.get("month1")
+    month2_str = request.args.get("month2")
+
+    if not month1_str or not month2_str:
+        return jsonify({"error": "month1 and month2 parameters are required"}), 400
+
+    try:
+        y1, m1 = [int(x) for x in month1_str.split("-")]
+        y2, m2 = [int(x) for x in month2_str.split("-")]
+    except (ValueError, TypeError):
+        return jsonify({"error": "Invalid month format. Use YYYY-MM"}), 400
+
+    # Get snapshots or calculate on the fly
+    snap1 = MonthlySnapshot.query.filter_by(year=y1, month=m1).first()
+    snap2 = MonthlySnapshot.query.filter_by(year=y2, month=m2).first()
+
+    # If snapshots don't exist, calculate them
+    if not snap1:
+        snap1 = save_monthly_snapshot(y1, m1)
+    if not snap2:
+        snap2 = save_monthly_snapshot(y2, m2)
+
+    # Calculate differences
+    revenue_diff = snap2.total_revenue - snap1.total_revenue
+    profit_diff = snap2.total_profit - snap1.total_profit
+    net_profit_diff = snap2.net_profit - snap1.net_profit
+
+    revenue_pct = (revenue_diff / snap1.total_revenue * 100) if snap1.total_revenue > 0 else 0
+    profit_pct = (profit_diff / snap1.total_profit * 100) if snap1.total_profit > 0 else 0
+
+    return jsonify({
+        "month1": {
+            "month": f"{y1}-{m1:02d}",
+            "total_revenue": round(snap1.total_revenue, 2),
+            "total_profit": round(snap1.total_profit, 2),
+            "net_profit": round(snap1.net_profit, 2),
+            "sale_count": snap1.sale_count
+        },
+        "month2": {
+            "month": f"{y2}-{m2:02d}",
+            "total_revenue": round(snap2.total_revenue, 2),
+            "total_profit": round(snap2.total_profit, 2),
+            "net_profit": round(snap2.net_profit, 2),
+            "sale_count": snap2.sale_count
+        },
+        "comparison": {
+            "revenue_difference": round(revenue_diff, 2),
+            "revenue_percentage_change": round(revenue_pct, 2),
+            "profit_difference": round(profit_diff, 2),
+            "profit_percentage_change": round(profit_pct, 2),
+            "net_profit_difference": round(net_profit_diff, 2)
+        }
     }), 200
 
 
@@ -519,14 +672,14 @@ def _simple_report_html(title, endpoint):
       html += `<div class="kpi"><h4>Sales Count</h4><p>${{d.sale_count}}</p></div>`;
       html += '</div></div>';
       if (d.daily_breakdown) {{
-        html += '<div class="card"><h3 style="margin-bottom:.75rem">Daily Breakdown</h3><table><thead><tr><th>Date</th><th>Revenue</th><th>Profit</th><th>Sales</th><tr></thead><tbody>';
+        html += '<div class="card"><h3 style="margin-bottom:.75rem">Daily Breakdown</h3><table><thead><tr><th>Date</th><th>Revenue</th><th>Profit</th><th>Sales</th></tr></thead><tbody>';
         d.daily_breakdown.forEach(r => {{
           html += `<tr><td>${{r.date}}</td><td>KSh ${{fmt(r.revenue)}}</td><td>KSh ${{fmt(r.profit)}}</td><td>${{r.sale_count}}</td></tr>`;
         }});
         html += '</tbody></table></div>';
       }}
       if (d.top_products) {{
-        html += '<div class="card"><h3 style="margin-bottom:.75rem">Top 5 Products</h3><table><thead><tr><th>Product</th><th>Units Sold</th><th>Revenue</th><th>Profit</th></tr></thead><tbody>';
+        html += '<div class="card"><h3 style="margin-bottom:.75rem">Top 5 Products</h3><td><thead><tr><th>Product</th><th>Units Sold</th><th>Revenue</th><th>Profit</th></tr></thead><tbody>';
         d.top_products.forEach(r => {{
           html += `<tr><td>${{r.name}}</td><td>${{r.units_sold}}</td><td>KSh ${{fmt(r.revenue)}}</td><td>KSh ${{fmt(r.profit)}}</td></tr>`;
         }});
