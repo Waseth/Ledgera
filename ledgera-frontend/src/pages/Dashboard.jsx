@@ -3,7 +3,7 @@ import { motion } from 'framer-motion';
 import {
   FiDollarSign, FiTrendingUp, FiTrendingDown, FiActivity,
   FiRefreshCw, FiPlus, FiAlertCircle, FiPackage, FiCalendar, FiClock, FiDollarSign as FiExpense,
-  FiTruck, FiWifi, FiDatabase, FiHome, FiZap, FiMoreHorizontal
+  FiTruck, FiWifi, FiDatabase, FiHome, FiZap, FiMoreHorizontal, FiBarChart2
 } from 'react-icons/fi';
 import {
   AreaChart, Area, BarChart, Bar, LineChart, Line,
@@ -65,11 +65,13 @@ export default function Dashboard() {
   const { toast } = useToast();
   const [data, setData] = useState(null);
   const [weekly, setWeekly] = useState(null);
+  const [weeklyByMonth, setWeeklyByMonth] = useState(null);
   const [dailyReport, setDailyReport] = useState(null);
   const [monthlyReport, setMonthlyReport] = useState(null);
   const [lowStockProducts, setLowStockProducts] = useState([]);
   const [recentExpenses, setRecentExpenses] = useState([]);
   const [totalExpenses, setTotalExpenses] = useState(0);
+  const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
   const [loading, setLoading] = useState(true);
   const [prodModal, setProdModal] = useState(false);
   const [expenseModal, setExpenseModal] = useState(false);
@@ -77,13 +79,14 @@ export default function Dashboard() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [dash, wk, daily, monthly, low, expenses] = await Promise.all([
+      const [dash, wk, daily, monthly, low, expenses, weeklyMonth] = await Promise.all([
         api.get('/reports/dashboard'),
         api.get('/reports/weekly'),
         api.get('/reports/daily'),
         api.get('/reports/monthly'),
         api.get('/products/low-stock'),
         api.get('/expenses'),
+        api.get(`/reports/weekly-by-month?month=${selectedMonth}`),
       ]);
       setData(dash);
       setWeekly(wk);
@@ -91,8 +94,8 @@ export default function Dashboard() {
       setMonthlyReport(monthly);
       setLowStockProducts(Array.isArray(low) ? low : []);
       setRecentExpenses(Array.isArray(expenses) ? expenses.slice(0, 5) : []);
+      setWeeklyByMonth(weeklyMonth);
 
-      // Calculate total expenses for today
       const todayTotal = Array.isArray(expenses)
         ? expenses.reduce((sum, e) => sum + e.amount, 0)
         : 0;
@@ -102,9 +105,9 @@ export default function Dashboard() {
     } finally {
       setLoading(false);
     }
-  }, [toast]);
+  }, [toast, selectedMonth]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { load(); }, [load, selectedMonth]);
 
   if (loading) return (
     <div className="page-wrapper">
@@ -128,8 +131,12 @@ export default function Dashboard() {
   const todayIndex = chartData.findIndex(d => d.fullDate === todayStr);
 
   const todayExpectedCash = dailyReport?.cash_revenue || 0;
-  const weekExpectedCash = weekly?.total_revenue || 0;
   const monthExpectedCash = monthlyReport?.total_revenue || 0;
+
+  // Handle month change for weekly breakdown
+  const handleMonthChange = (e) => {
+    setSelectedMonth(e.target.value);
+  };
 
   return (
     <div className="page-wrapper">
@@ -168,7 +175,7 @@ export default function Dashboard() {
         <h3 style={{ fontFamily: 'Poppins, sans-serif', fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
           Expected Cash (Based on Sales)
         </h3>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '1rem' }}>
           <div className="card stat-card" style={{ textAlign: 'center' }}>
             <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '0.5rem' }}>
               <FiDollarSign size={14} style={{ display: 'inline', marginRight: '0.25rem' }} />
@@ -181,17 +188,7 @@ export default function Dashboard() {
           </div>
           <div className="card stat-card" style={{ textAlign: 'center' }}>
             <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '0.5rem' }}>
-              <FiTrendingUp size={14} style={{ display: 'inline', marginRight: '0.25rem' }} />
-              Week's Expected Cash
-            </div>
-            <div style={{ fontSize: '1.8rem', fontWeight: 700, color: '#06B6D4' }}>KSh {fmt(weekExpectedCash)}</div>
-            <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
-              Total cash sales (last 7 days)
-            </div>
-          </div>
-          <div className="card stat-card" style={{ textAlign: 'center' }}>
-            <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '0.5rem' }}>
-              <FiActivity size={14} style={{ display: 'inline', marginRight: '0.25rem' }} />
+              <FiBarChart2 size={14} style={{ display: 'inline', marginRight: '0.25rem' }} />
               Month's Expected Cash
             </div>
             <div style={{ fontSize: '1.8rem', fontWeight: 700, color: '#10B981' }}>KSh {fmt(monthExpectedCash)}</div>
@@ -202,16 +199,16 @@ export default function Dashboard() {
         </div>
       </motion.div>
 
-      {/* KPI Cards */}
+      {/* KPI Cards with auto-height - Week Revenue card removed from here */}
       <motion.div
         className="kpi-grid"
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ staggerChildren: 0.1 }}
-        style={{ marginBottom: '1.5rem' }}
+        style={{ marginBottom: '1.5rem', alignItems: 'stretch' }}
       >
-        <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.1 }}>
-          <div className="card stat-card">
+        <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.1 }} style={{ height: 'auto' }}>
+          <div className="card stat-card" style={{ height: '100%' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
               <div>
                 <div className="stat-label" style={{ fontFamily: 'Poppins, sans-serif' }}>Today's Revenue</div>
@@ -222,8 +219,8 @@ export default function Dashboard() {
           </div>
         </motion.div>
 
-        <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.2 }}>
-          <div className="card stat-card">
+        <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.2 }} style={{ height: 'auto' }}>
+          <div className="card stat-card" style={{ height: '100%' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
               <div>
                 <div className="stat-label" style={{ fontFamily: 'Poppins, sans-serif' }}>Today's Expenses</div>
@@ -234,8 +231,8 @@ export default function Dashboard() {
           </div>
         </motion.div>
 
-        <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.3 }}>
-          <div className="card stat-card">
+        <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.3 }} style={{ height: 'auto' }}>
+          <div className="card stat-card" style={{ height: '100%' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
               <div>
                 <div className="stat-label" style={{ fontFamily: 'Poppins, sans-serif' }}>Today's Net Profit</div>
@@ -248,20 +245,8 @@ export default function Dashboard() {
           </div>
         </motion.div>
 
-        <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.4 }}>
-          <div className="card stat-card">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-              <div>
-                <div className="stat-label" style={{ fontFamily: 'Poppins, sans-serif' }}>Week Revenue</div>
-                <div className="stat-value" style={{ fontFamily: 'Poppins, sans-serif' }}>KSh {fmt(data?.week?.revenue)}</div>
-              </div>
-              <FiActivity size={28} color="#06B6D4" style={{ opacity: 0.7 }} />
-            </div>
-          </div>
-        </motion.div>
-
-        <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.5 }}>
-          <div className="card stat-card">
+        <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.4 }} style={{ height: 'auto' }}>
+          <div className="card stat-card" style={{ height: '100%' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
               <div>
                 <div className="stat-label" style={{ fontFamily: 'Poppins, sans-serif' }}>Outstanding Debt</div>
@@ -271,6 +256,92 @@ export default function Dashboard() {
             </div>
           </div>
         </motion.div>
+      </motion.div>
+
+      {/* Weekly Breakdown by Month (Weeks 1-4) */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.45 }}
+        className="card"
+        style={{ padding: '1.25rem', marginBottom: '1.5rem' }}
+      >
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem', marginBottom: '1rem' }}>
+          <h3 style={{ fontFamily: 'Poppins, sans-serif', fontSize: '0.9rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <FiBarChart2 size={16} /> Weekly Performance by Month
+          </h3>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <FiCalendar size={14} color="var(--text-muted)" />
+            <input
+              type="month"
+              className="form-input"
+              value={selectedMonth}
+              onChange={handleMonthChange}
+              style={{ width: '160px', fontFamily: 'Poppins, sans-serif', fontSize: '0.85rem' }}
+            />
+          </div>
+        </div>
+
+        {weeklyByMonth?.weeks && weeklyByMonth.weeks.length > 0 ? (
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+            gap: '1rem',
+            alignItems: 'stretch'
+          }}>
+            {weeklyByMonth.weeks.map(week => (
+              <div
+                key={week.week}
+                className="stat-card"
+                style={{
+                  background: 'var(--bg-surface)',
+                  borderRadius: 'var(--radius-md)',
+                  padding: '0.75rem',
+                  border: '1px solid var(--border-medium)',
+                  height: '100%',
+                  display: 'flex',
+                  flexDirection: 'column'
+                }}
+              >
+                <div style={{
+                  fontFamily: 'Poppins, sans-serif',
+                  fontWeight: 700,
+                  fontSize: '0.8rem',
+                  color: 'var(--accent-teal)',
+                  borderBottom: '1px solid var(--border-medium)',
+                  paddingBottom: '0.4rem',
+                  marginBottom: '0.5rem'
+                }}>
+                  {week.week_name} ({week.start.substring(5)} to {week.end.substring(5)})
+                </div>
+                <div style={{ fontSize: '0.75rem', display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ color: 'var(--text-muted)' }}>Revenue:</span>
+                    <span style={{ fontWeight: 600, color: '#3B82F6' }}>KSh {fmt(week.total_revenue)}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ color: 'var(--text-muted)' }}>Profit:</span>
+                    <span style={{ fontWeight: 600, color: '#10B981' }}>KSh {fmt(week.total_profit)}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ color: 'var(--text-muted)' }}>Net Profit:</span>
+                    <span style={{ fontWeight: 600, color: week.net_profit >= 0 ? '#10B981' : '#EF4444' }}>
+                      KSh {fmt(week.net_profit)}
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ color: 'var(--text-muted)' }}>Sales:</span>
+                    <span style={{ fontWeight: 600 }}>{week.sale_count}</span>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>
+            <p>No data available for {weeklyByMonth?.month_name}</p>
+          </div>
+        )}
       </motion.div>
 
       {/* Recent Expenses Section */}
