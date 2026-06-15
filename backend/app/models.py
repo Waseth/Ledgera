@@ -48,6 +48,7 @@ class Product(db.Model):
     selling_price = db.Column(db.Float, nullable=False)
     quantity = db.Column(db.Integer, nullable=False, default=0)
     unit = db.Column(db.String(30), default="piece")
+    is_active = db.Column(db.Boolean, default=True, nullable=False)  # ADD THIS LINE
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow,
                            onupdate=datetime.utcnow, nullable=False)

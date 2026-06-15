@@ -30,7 +30,7 @@ def _cached_products():
         Product.selling_price,
         Product.quantity,
         Product.unit,
-    ).order_by(Product.name).limit(200).all()
+    ).filter(Product.is_active == True).order_by(Product.name).limit(200).all()  # ← ADD filter
     return rows  # list of named tuples
 
 
@@ -56,9 +56,8 @@ def _cached_low_stock():
         Product.id,
         Product.name,
         Product.quantity,
-    ).filter(Product.quantity <= threshold).all()
+    ).filter(Product.quantity <= threshold, Product.is_active == True).all()  # ← ADD is_active filter
     return rows
-
 
 def get_low_stock():
     return _cached_low_stock()

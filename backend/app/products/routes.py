@@ -146,6 +146,42 @@ def delete_product(product_id):
 
 
 # ---------------------------------------------------------------------------
+# POST /products/<id>/archive  – archive product (ADMIN ONLY)
+# ---------------------------------------------------------------------------
+@products_bp.route("/<int:product_id>/archive", methods=["POST"])
+@token_required
+def archive_product(product_id):
+    """
+    Archive a product (admin only).
+    Archived products are hidden from UI but keep sales history.
+    """
+    user_role = request.user_payload.get('role') if hasattr(request, 'user_payload') else None
+    user_id = request.user_payload.get('user_id') if hasattr(request, 'user_payload') else None
+
+    if user_role != 'admin':
+        return jsonify({"error": "Only admin can archive products"}), 403
+
+    product = Product.query.get(product_id)
+    if not product:
+        return jsonify({"error": "Product not found."}), 404
+
+    product.is_active = False
+    product.quantity = 0
+
+    db.session.add(AuditLog(
+        user_id=user_id,
+        action="archive_product",
+        details=f"product_id={product_id} name={product.name}",
+    ))
+    db.session.commit()
+
+    app_cache.invalidate_products()
+    app_cache.invalidate_low_stock()
+
+    return jsonify({"message": f"Product '{product.name}' has been archived."}), 200
+
+
+# ---------------------------------------------------------------------------
 # POST /products  – add new OR restock existing (ADMIN ONLY)
 # ---------------------------------------------------------------------------
 @products_bp.route("", methods=["POST"])
