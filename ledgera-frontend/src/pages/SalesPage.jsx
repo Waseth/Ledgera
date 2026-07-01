@@ -40,13 +40,11 @@ export default function SalesPage() {
       setProducts(prods);
       setSales(s);
 
-      if (prods.length > 0 && !form.product_id) {
-        setForm(f => ({ ...f, product_id: prods[0].id }));
-      }
+      // Don't auto-select product here anymore
     } catch (err) {
       toast(err.message, 'error');
     }
-  }, [toast, form.product_id]);
+  }, [toast]);
 
   useEffect(() => { loadAll(); }, [loadAll]);
 
@@ -93,12 +91,14 @@ export default function SalesPage() {
 
       toast(`Sale recorded! KSh ${fmt(res.total_price)}`, 'success');
 
-      setForm(f => ({
-        ...f,
-        quantity_sold: '1',
-        customer_name: '',
-        customer_phone: ''
-      }));
+      // CLEAR ALL FORM FIELDS - Reset to initial state
+      setForm({
+        product_id: '',           // Clear product selection
+        quantity_sold: '1',       // Reset quantity to 1
+        payment_type: 'cash',     // Reset payment type to cash
+        customer_name: '',        // Clear customer name
+        customer_phone: '',       // Clear customer phone
+      });
 
       loadAll();
     } catch (err) {
@@ -240,7 +240,7 @@ export default function SalesPage() {
               <button
                 className={`btn ${form.payment_type === 'cash' ? 'btn-primary' : 'btn-outline'}`}
                 onClick={() => set('payment_type')('cash')}
-                style={{ flex: 1, fontFamily: 'Poppins, sans-serif', color: '#0F172A' }}
+                style={{ flex: 1, fontFamily: 'Poppins, sans-serif', color: form.payment_type === 'cash' ? '#0F172A' : undefined }}
               >
                 <FiDollarSign size={14} /> Cash
               </button>
@@ -307,7 +307,7 @@ export default function SalesPage() {
           <button
             className="btn btn-primary"
             onClick={handleSale}
-            disabled={loading}
+            disabled={loading || !form.product_id}
             style={{ width: '100%', marginTop: '1rem', padding: '0.75rem', fontFamily: 'Poppins, sans-serif', color: '#0F172A' }}
           >
             {loading ? 'Processing...' : 'Record Sale'}
