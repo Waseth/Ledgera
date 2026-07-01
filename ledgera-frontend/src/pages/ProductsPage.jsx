@@ -145,70 +145,57 @@ export default function ProductsPage() {
         ))}
       </motion.div>
 
-      {/* Low Stock Alert */}
-      {safeLowStock.length > 0 && (
-        <div
-          style={{
-            background: 'var(--accent-red-dim)',
-            border: '1.5px solid var(--accent-red)',
-            borderRadius: 8,
-            padding: '0.75rem 1rem',
-            marginBottom: '1.25rem',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '1rem',
-            flexWrap: 'wrap',
-          }}
-        >
-          <FiAlertCircle color="var(--accent-red)" size={20} />
-          <span style={{ fontFamily: 'Poppins, sans-serif', fontWeight: 700, fontSize: '0.82rem', color: 'var(--accent-red)', flex: 1 }}>
-            {safeLowStock.length} item{safeLowStock.length > 1 ? 's' : ''} need restocking:
-            {safeLowStock.map(p => p.name).join(', ')}
-          </span>
-        </div>
-      )}
-
-      {/* Responsive search and filter section */}
+      {/* STICKY CONTROLS - Search, Filter, and Refresh */}
       <div style={{
-        display: 'flex',
-        gap: '0.65rem',
+        position: 'sticky',
+        top: 0,
+        backgroundColor: 'var(--bg-primary)',
+        zIndex: 10,
+        paddingTop: '0.5rem',
+        paddingBottom: '0.75rem',
         marginBottom: '1rem',
-        flexWrap: 'wrap',
-        alignItems: 'center',
-        flexDirection: 'row'
+        borderBottom: '1px solid var(--border-color)',
       }}>
-        <div style={{ position: 'relative', flex: 1, maxWidth: 260, minWidth: '180px' }}>
-          <FiSearch style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} size={14} />
-          <input
-            className="form-input"
-            style={{ paddingLeft: '2rem', fontFamily: 'Poppins, sans-serif', width: '100%' }}
-            placeholder="Search products..."
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-          />
-        </div>
-        <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
-          <button
-            className={`btn btn-sm ${filter === 'all' ? 'btn-primary' : 'btn-outline'}`}
-            onClick={() => setFilter('all')}
-            style={{ fontFamily: 'Poppins, sans-serif', color: filter === 'all' ? '#0F172A' : undefined }}
-          >
-            All ({safeProducts.length})
+        <div style={{
+          display: 'flex',
+          gap: '0.65rem',
+          flexWrap: 'wrap',
+          alignItems: 'center',
+          flexDirection: 'row'
+        }}>
+          <div style={{ position: 'relative', flex: 1, maxWidth: 260, minWidth: '180px' }}>
+            <FiSearch style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} size={14} />
+            <input
+              className="form-input"
+              style={{ paddingLeft: '2rem', fontFamily: 'Poppins, sans-serif', width: '100%' }}
+              placeholder="Search products..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+            />
+          </div>
+          <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
+            <button
+              className={`btn btn-sm ${filter === 'all' ? 'btn-primary' : 'btn-outline'}`}
+              onClick={() => setFilter('all')}
+              style={{ fontFamily: 'Poppins, sans-serif', color: filter === 'all' ? '#0F172A' : undefined }}
+            >
+              All ({safeProducts.length})
+            </button>
+            <button
+              className={`btn btn-sm ${filter === 'low' ? 'btn-primary' : 'btn-outline'}`}
+              onClick={() => setFilter('low')}
+              style={{ fontFamily: 'Poppins, sans-serif', color: filter === 'low' ? '#0F172A' : undefined }}
+            >
+              Low Stock ({safeLowStock.length})
+            </button>
+          </div>
+          <button className="btn btn-outline btn-sm" onClick={load} style={{ marginLeft: 'auto' }}>
+            <FiRefreshCw size={14} /> Refresh
           </button>
-          <button
-            className={`btn btn-sm ${filter === 'low' ? 'btn-primary' : 'btn-outline'}`}
-            onClick={() => setFilter('low')}
-            style={{ fontFamily: 'Poppins, sans-serif', color: filter === 'low' ? '#0F172A' : undefined }}
-          >
-            Low Stock ({safeLowStock.length})
-          </button>
         </div>
-        <button className="btn btn-outline btn-sm" onClick={load} style={{ marginLeft: 'auto' }}>
-          <FiRefreshCw size={14} /> Refresh
-        </button>
       </div>
 
-      {/* Scrollable table wrapper */}
+      {/* SCROLLABLE TABLE WRAPPER - Increased height */}
       <motion.div
         className="table-wrap"
         initial={{ opacity: 0, y: 16 }}
@@ -216,7 +203,10 @@ export default function ProductsPage() {
         transition={{ delay: 0.15 }}
         style={{
           overflowX: 'auto',
+          overflowY: 'auto',
+          maxHeight: 'calc(100vh - 380px)', /* INCREASED: was 480px, now 380px for more table space */
           WebkitOverflowScrolling: 'touch',
+          position: 'relative',
         }}
       >
         <div style={{ minWidth: '800px' }}>
@@ -426,6 +416,10 @@ export default function ProductsPage() {
         @media (max-width: 768px) {
           .kpi-grid {
             grid-template-columns: 1fr !important;
+          }
+
+          .table-wrap {
+            max-height: calc(100vh - 180px) !important;
           }
         }
       `}</style>
