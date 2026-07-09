@@ -1,15 +1,3 @@
-"""
-sales/routes.py – Sales logging (cash or debt).
-
-MOST CRITICAL PERFORMANCE PATH in the entire system.
-
-OPTIMIZATIONS:
-1. Single DB transaction for: stock reduction + sale insert + debt insert.
-2. Product fetched with only required fields (id, quantity, prices).
-3. No ORM object loaded for stock update – raw UPDATE used.
-4. Cache invalidated only after successful commit.
-"""
-
 from flask import request, jsonify, current_app
 from app.sales import sales_bp
 from app.extensions import db
@@ -18,33 +6,15 @@ from app import cache as app_cache
 from app.auth.routes import token_required
 
 
-# ---------------------------------------------------------------------------
-# GET /sales  – shopkeeper landing page (HTML)
-# ---------------------------------------------------------------------------
 @sales_bp.route("", methods=["GET"])
 @token_required
 def index():
-    """Simple HTML sales dashboard – served once, JS handles the rest."""
     return _sales_html()
 
 
-# ---------------------------------------------------------------------------
-# POST /sales  – log a sale (cash or debt)
-# ---------------------------------------------------------------------------
 @sales_bp.route("", methods=["POST"])
 @token_required
 def log_sale():
-    """
-    POST /sales
-    Body: {
-      "product_id": int,
-      "quantity_sold": int,
-      "payment_type": "cash" | "debt",
-      "customer_name": str,   # required if debt
-      "customer_phone": str,  # required if debt
-    }
-    """
-    # --- ROLE CHECK: Only shopkeepers can record sales ---
     user_role = request.user_payload.get('role') if hasattr(request, 'user_payload') else None
     user_id = request.user_payload.get('user_id') if hasattr(request, 'user_payload') else None
 
@@ -53,16 +23,19 @@ def log_sale():
 
     data = request.get_json(silent=True) or {}
 
-    # --- Input validation (before any DB hit) ---
     errors = []
     product_id = data.get("product_id")
     quantity_sold = data.get("quantity_sold")
     payment_type = (data.get("payment_type") or "cash").lower()
+    amount_paid = data.get("amount_paid", 0)
 
     try:
         product_id = int(product_id)
         quantity_sold = int(quantity_sold)
         if quantity_sold <= 0:
+            raise ValueError
+        amount_paid = float(amount_paid) if amount_paid else 0
+        if amount_paid < 0:
             raise ValueError
     except (TypeError, ValueError):
         errors.append("product_id and quantity_sold must be positive integers.")
@@ -81,7 +54,6 @@ def log_sale():
     if errors:
         return jsonify({"errors": errors}), 400
 
-    # --- Fetch only what we need from product ---
     product_row = (
         db.session.query(
             Product.id,
@@ -101,19 +73,20 @@ def log_sale():
             "error": f"Insufficient stock. Available: {product_row.quantity}."
         }), 409
 
-    # --- Compute financials ---
     total_price = round(product_row.selling_price * quantity_sold, 2)
     profit = round((product_row.selling_price - product_row.buying_price) * quantity_sold, 2)
 
-    # --- Single transaction: all writes together ---
+    if payment_type == "debt" and amount_paid > total_price:
+        return jsonify({
+            "error": f"Amount paid ({amount_paid}) cannot exceed total price ({total_price})."
+        }), 400
+
     try:
-        # 1. Reduce stock
         db.session.query(Product).filter(Product.id == product_id).update(
             {"quantity": product_row.quantity - quantity_sold},
             synchronize_session=False,
         )
 
-        # 2. Insert sale
         sale = Sale(
             product_id=product_id,
             user_id=user_id,
@@ -127,30 +100,30 @@ def log_sale():
         db.session.add(sale)
         db.session.flush()
 
-        # 3. Insert debt record (if needed)
         if payment_type == "debt":
+            remaining_balance = round(total_price - amount_paid, 2)
+
             debt = Debt(
                 sale_id=sale.id,
                 customer_name=customer_name,
                 customer_phone=customer_phone,
-                amount=total_price,
+                amount=remaining_balance,
+                initial_amount=total_price,
+                amount_paid=amount_paid,
             )
             db.session.add(debt)
 
-        # 4. Audit log
         db.session.add(AuditLog(
             user_id=user_id,
             action="log_sale",
-            details=f"sale_id={sale.id} product_id={product_id} qty={quantity_sold} type={payment_type}",
+            details=f"sale_id={sale.id} product_id={product_id} qty={quantity_sold} type={payment_type} amount_paid={amount_paid}",
         ))
 
-        # 5. Low-stock notification (SINGLE NOTIFICATION - short format only)
         new_qty = product_row.quantity - quantity_sold
         threshold = current_app.config.get("LOW_STOCK_THRESHOLD", 5)
         if new_qty <= threshold:
             admin_users = User.query.filter_by(role='admin').all()
             product_name = product_row.name
-            # Short format message only
             message = f"⚠️ Low stock: {product_name} has only {new_qty} units left!"
             for admin in admin_users:
                 db.session.add(Notification(
@@ -169,22 +142,29 @@ def log_sale():
     app_cache.invalidate_products()
     app_cache.invalidate_low_stock()
 
-    return jsonify({
+    response_data = {
         "message": "Sale recorded.",
         "sale_id": sale.id,
         "total_price": total_price,
         "profit": profit,
         "stock_remaining": new_qty,
-    }), 201
+        "payment_type": payment_type,
+    }
+
+    if payment_type == "debt":
+        response_data["amount_paid"] = amount_paid
+        response_data["remaining_balance"] = remaining_balance
+        if remaining_balance > 0:
+            response_data["message"] = f"Debt recorded. Paid: KSh {amount_paid}, Balance: KSh {remaining_balance}"
+        else:
+            response_data["message"] = "Debt fully paid."
+
+    return jsonify(response_data), 201
 
 
-# ---------------------------------------------------------------------------
-# GET /sales/today  – all sales from today
-# ---------------------------------------------------------------------------
 @sales_bp.route("/today", methods=["GET"])
 @token_required
 def today_sales():
-    """Returns today's sales joined with product name."""
     from datetime import date
     from app.models import Product as Prod
 
@@ -221,9 +201,6 @@ def today_sales():
     ]), 200
 
 
-# ---------------------------------------------------------------------------
-# Minimal HTML sales page
-# ---------------------------------------------------------------------------
 def _sales_html():
     return """<!DOCTYPE html>
 <html lang="en">
@@ -269,6 +246,8 @@ def _sales_html():
       <input type="text" id="cname">
       <label>Customer Phone</label>
       <input type="text" id="cphone">
+      <label>Amount Paid (KSh)</label>
+      <input type="number" id="amount_paid" value="0" min="0" step="0.01">
     </div>
     <button onclick="recordSale()">Record Sale</button>
     <p id="msg"></p>
@@ -276,14 +255,14 @@ def _sales_html():
   <div class="card" style="margin-top:1.5rem; max-width:700px">
     <h2>Today's Sales</h2>
     <table id="sales-table">
-      <thead><table><th>Product</th><th>Qty</th><th>Total</th><th>Profit</th><th>Type</th><th>Time</th></tr></thead>
+      <thead><tr><th>Product</th><th>Qty</th><th>Total</th><th>Profit</th><th>Type</th><th>Time</th></tr></thead>
       <tbody></tbody>
     </table>
   </div>
   <script>
     function toggleDebt() {
-      document.getElementById('debt-fields').style.display =
-        document.getElementById('payment').value === 'debt' ? 'block' : 'none';
+      const show = document.getElementById('payment').value === 'debt';
+      document.getElementById('debt-fields').style.display = show ? 'block' : 'none';
     }
     async function loadProducts() {
       const res = await fetch('/products');
@@ -298,7 +277,7 @@ def _sales_html():
       const sales = await res.json();
       const tbody = document.querySelector('#sales-table tbody');
       tbody.innerHTML = sales.map(s =>
-        `<tr><td>${s.product_name}<tr><td>${s.quantity_sold}</td>
+        `<tr><td>${s.product_name}</td><td>${s.quantity_sold}</td>
           <td>KSh${s.total_price}</td><td>KSh${s.profit}</td>
           <td>${s.payment_type}</td><td>${s.timestamp.substring(11,16)}</td></tr>`
       ).join('') || '<tr><td colspan="6" style="color:#888">No sales yet today.</td></tr>';
@@ -316,6 +295,7 @@ def _sales_html():
         payment_type: document.getElementById('payment').value,
         customer_name: document.getElementById('cname').value,
         customer_phone: document.getElementById('cphone').value,
+        amount_paid: parseFloat(document.getElementById('amount_paid').value) || 0,
       };
       const res = await fetch('/sales', {
         method: 'POST',
@@ -325,7 +305,11 @@ def _sales_html():
       const data = await res.json();
       if (res.ok) {
         msg.className = 'ok';
-        msg.textContent = `✓ Sale recorded. Total: KSh${data.total_price}, Profit: KSh${data.profit}`;
+        let msgText = `✓ ${data.message}`;
+        if (data.remaining_balance !== undefined) {
+          msgText += ` | Balance: KSh${data.remaining_balance}`;
+        }
+        msg.textContent = msgText;
         loadProducts();
         loadTodaySales();
       } else {

@@ -1,22 +1,9 @@
-"""
-models.py – All database models for the shop management system.
-
-OPTIMIZATION NOTES:
-- Indexes on every foreign-key / filter column → avoids full-table scans.
-- __repr__ kept minimal (no lazy-loading triggered).
-- Decimal stored as Float (SQLite has no DECIMAL); use 2-decimal rounding at
-  the application layer.
-"""
-
 from datetime import datetime
 from flask_login import UserMixin
 from sqlalchemy import Index, Text
 from app.extensions import db
 
 
-# ---------------------------------------------------------------------------
-# User
-# ---------------------------------------------------------------------------
 class User(UserMixin, db.Model):
     __tablename__ = "users"
 
@@ -24,11 +11,10 @@ class User(UserMixin, db.Model):
     name = db.Column(db.String(80), nullable=False)
     email = db.Column(db.String(120), unique=True, nullable=False, index=True)
     password_hash = db.Column(db.String(256), nullable=False)
-    role = db.Column(db.String(20), nullable=False, default="shopkeeper")  # "admin" | "shopkeeper"
+    role = db.Column(db.String(20), nullable=False, default="shopkeeper")
     is_active = db.Column(db.Boolean, default=True, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
-    # Relationships (lazy="dynamic" → queries not loaded until called)
     sales = db.relationship("Sale", backref="seller", lazy="dynamic")
     audit_logs = db.relationship("AuditLog", backref="actor", lazy="dynamic")
 
@@ -36,9 +22,6 @@ class User(UserMixin, db.Model):
         return f"<User {self.email}>"
 
 
-# ---------------------------------------------------------------------------
-# Product
-# ---------------------------------------------------------------------------
 class Product(db.Model):
     __tablename__ = "products"
 
@@ -48,7 +31,7 @@ class Product(db.Model):
     selling_price = db.Column(db.Float, nullable=False)
     quantity = db.Column(db.Integer, nullable=False, default=0)
     unit = db.Column(db.String(30), default="piece")
-    is_active = db.Column(db.Boolean, default=True, nullable=False)  # ADD THIS LINE
+    is_active = db.Column(db.Boolean, default=True, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow,
                            onupdate=datetime.utcnow, nullable=False)
@@ -59,9 +42,6 @@ class Product(db.Model):
         return f"<Product {self.name}>"
 
 
-# ---------------------------------------------------------------------------
-# Sale (No day_id anymore)
-# ---------------------------------------------------------------------------
 class Sale(db.Model):
     __tablename__ = "sales"
 
@@ -70,10 +50,10 @@ class Sale(db.Model):
     user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
     quantity_sold = db.Column(db.Integer, nullable=False)
     unit_price = db.Column(db.Float, nullable=False)
-    buying_price_at_sale = db.Column(db.Float, nullable=False)  # snapshot to preserve profit
+    buying_price_at_sale = db.Column(db.Float, nullable=False)
     total_price = db.Column(db.Float, nullable=False)
     profit = db.Column(db.Float, nullable=False)
-    payment_type = db.Column(db.String(10), nullable=False, default="cash")  # "cash" | "debt"
+    payment_type = db.Column(db.String(10), nullable=False, default="cash")
     timestamp = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
     __table_args__ = (
@@ -105,9 +85,6 @@ class Expense(db.Model):
         return f"<Expense {self.description} {self.amount}>"
 
 
-# ---------------------------------------------------------------------------
-# Debt
-# ---------------------------------------------------------------------------
 class Debt(db.Model):
     __tablename__ = "debts"
 
@@ -116,6 +93,8 @@ class Debt(db.Model):
     customer_name = db.Column(db.String(120), nullable=False)
     customer_phone = db.Column(db.String(20), nullable=False)
     amount = db.Column(db.Float, nullable=False)
+    initial_amount = db.Column(db.Float, nullable=True)
+    amount_paid = db.Column(db.Float, default=0.0)
     is_paid = db.Column(db.Boolean, default=False, nullable=False)
     paid_at = db.Column(db.DateTime, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
@@ -128,19 +107,16 @@ class Debt(db.Model):
     )
 
     def __repr__(self):
-        return f"<Debt {self.customer_name} paid={self.is_paid}>"
+        return f"<Debt {self.customer_name} amount={self.amount} paid={self.is_paid}>"
 
 
-# ---------------------------------------------------------------------------
-# Notification
-# ---------------------------------------------------------------------------
 class Notification(db.Model):
     __tablename__ = "notifications"
 
     id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)  # None = all users
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
     message = db.Column(db.String(300), nullable=False)
-    category = db.Column(db.String(30), default="info")  # info | warning | danger
+    category = db.Column(db.String(30), default="info")
     is_read = db.Column(db.Boolean, default=False, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
@@ -152,15 +128,12 @@ class Notification(db.Model):
         return f"<Notification {self.category}: {self.message[:30]}>"
 
 
-# ---------------------------------------------------------------------------
-# AuditLog  (immutable – no edits/deletes allowed anywhere)
-# ---------------------------------------------------------------------------
 class AuditLog(db.Model):
     __tablename__ = "audit_logs"
 
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
-    action = db.Column(db.String(50), nullable=False)   # e.g. "add_product", "log_sale"
+    action = db.Column(db.String(50), nullable=False)
     details = db.Column(db.Text, nullable=True)
     timestamp = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
@@ -173,15 +146,12 @@ class AuditLog(db.Model):
         return f"<AuditLog {self.action} by user_id={self.user_id}>"
 
 
-# ---------------------------------------------------------------------------
-# MonthlySnapshot – Stores monthly totals for historical comparison
-# ---------------------------------------------------------------------------
 class MonthlySnapshot(db.Model):
     __tablename__ = "monthly_snapshots"
 
     id = db.Column(db.Integer, primary_key=True)
     year = db.Column(db.Integer, nullable=False)
-    month = db.Column(db.Integer, nullable=False)  # 1-12
+    month = db.Column(db.Integer, nullable=False)
     total_revenue = db.Column(db.Float, default=0.0)
     total_profit = db.Column(db.Float, default=0.0)
     cash_revenue = db.Column(db.Float, default=0.0)

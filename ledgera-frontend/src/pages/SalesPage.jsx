@@ -29,6 +29,7 @@ export default function SalesPage() {
     payment_type: 'cash',
     customer_name: '',
     customer_phone: '',
+    amount_paid: '', // For partial debt payments
   });
 
   const set = k => v => setForm(f => ({ ...f, [k]: v }));
@@ -80,9 +81,24 @@ export default function SalesPage() {
       return;
     }
 
-    if (form.payment_type === 'debt' && (!form.customer_name.trim() || !form.customer_phone.trim())) {
-      toast('Customer name and phone required for debt sales.', 'warning');
-      return;
+    // Calculate total price
+    const totalPrice = selectedProduct ? selectedProduct.selling_price * quantity : 0;
+
+    if (form.payment_type === 'debt') {
+      if (!form.customer_name.trim() || !form.customer_phone.trim()) {
+        toast('Customer name and phone required for debt sales.', 'warning');
+        return;
+      }
+
+      const amountPaid = parseFloat(form.amount_paid);
+      if (!amountPaid || amountPaid < 0) {
+        toast('Please enter the amount paid.', 'warning');
+        return;
+      }
+      if (amountPaid > totalPrice) {
+        toast('Amount paid cannot exceed total price.', 'warning');
+        return;
+      }
     }
 
     setLoading(true);
@@ -96,19 +112,37 @@ export default function SalesPage() {
       if (form.payment_type === 'debt') {
         body.customer_name = form.customer_name.trim();
         body.customer_phone = form.customer_phone.trim();
+        // Send the amount paid - this will be used to create the debt record
+        body.amount_paid = parseFloat(form.amount_paid) || 0;
       }
 
       const res = await api.post('/sales', body);
 
-      toast(`Sale recorded! KSh ${fmt(res.total_price)}`, 'success');
+      const amountPaid = form.payment_type === 'debt' ? parseFloat(form.amount_paid) || 0 : totalPrice;
+      const balance = totalPrice - amountPaid;
 
-      // Reset form to default state with "Select a product..."
+      // Show appropriate success message
+      if (form.payment_type === 'debt') {
+        if (balance > 0) {
+          toast(
+            `Debt recorded! KSh ${fmt(amountPaid)} paid, Balance: KSh ${fmt(balance)}`,
+            'success'
+          );
+        } else {
+          toast(`Debt fully paid! KSh ${fmt(amountPaid)}`, 'success');
+        }
+      } else {
+        toast(`Sale recorded! KSh ${fmt(totalPrice)}`, 'success');
+      }
+
+      // Reset form to default state
       setForm({
-        product_id: '',           // Reset to empty - shows "Select a product..."
-        quantity_sold: '1',       // Reset quantity to 1
-        payment_type: 'cash',     // Reset payment type to cash
-        customer_name: '',        // Clear customer name
-        customer_phone: '',       // Clear customer phone
+        product_id: '',
+        quantity_sold: '1',
+        payment_type: 'cash',
+        customer_name: '',
+        customer_phone: '',
+        amount_paid: '',
       });
 
       // Close dropdown if open
@@ -131,6 +165,11 @@ export default function SalesPage() {
     const product = products.find(p => p.id === parseInt(form.product_id));
     return product ? `${product.name} - KSh ${product.selling_price}` : 'Select a product...';
   };
+
+  // Calculate totals
+  const totalPrice = selectedProduct ? selectedProduct.selling_price * parseInt(form.quantity_sold || 0) : 0;
+  const amountPaid = parseFloat(form.amount_paid) || 0;
+  const balance = totalPrice - amountPaid;
 
   return (
     <div className="page-wrapper">
@@ -370,7 +409,14 @@ export default function SalesPage() {
               type="number"
               min="1"
               value={form.quantity_sold}
-              onChange={e => set('quantity_sold')(e.target.value)}
+              onChange={e => {
+                set('quantity_sold')(e.target.value);
+                // Update amount paid when quantity changes for debt
+                if (form.payment_type === 'debt' && selectedProduct) {
+                  const total = selectedProduct.selling_price * parseInt(e.target.value || 0);
+                  set('amount_paid')(String(total));
+                }
+              }}
               style={{ fontFamily: 'Poppins, sans-serif' }}
             />
           </div>
@@ -380,14 +426,26 @@ export default function SalesPage() {
             <div style={{ display: 'flex', gap: '0.5rem' }}>
               <button
                 className={`btn ${form.payment_type === 'cash' ? 'btn-primary' : 'btn-outline'}`}
-                onClick={() => set('payment_type')('cash')}
+                onClick={() => {
+                  set('payment_type')('cash');
+                  set('amount_paid')('');
+                  set('customer_name')('');
+                  set('customer_phone')('');
+                }}
                 style={{ flex: 1, fontFamily: 'Poppins, sans-serif', color: form.payment_type === 'cash' ? '#0F172A' : undefined }}
               >
                 <FiDollarSign size={14} /> Cash
               </button>
               <button
                 className={`btn ${form.payment_type === 'debt' ? 'btn-secondary' : 'btn-outline'}`}
-                onClick={() => set('payment_type')('debt')}
+                onClick={() => {
+                  set('payment_type')('debt');
+                  // Auto-fill amount paid with total price
+                  if (selectedProduct) {
+                    const total = selectedProduct.selling_price * parseInt(form.quantity_sold || 0);
+                    set('amount_paid')(String(total));
+                  }
+                }}
                 style={{ flex: 1, fontFamily: 'Poppins, sans-serif' }}
               >
                 <FiUser size={14} /> Debt
@@ -421,6 +479,44 @@ export default function SalesPage() {
                   style={{ fontFamily: 'Poppins, sans-serif' }}
                 />
               </div>
+              <div className="form-group">
+                <label className="form-label" style={{ fontFamily: 'Poppins, sans-serif' }}>
+                  <FiDollarSign size={12} /> Amount Paid (KSh)
+                </label>
+                <input
+                  className="form-input"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={form.amount_paid}
+                  onChange={e => set('amount_paid')(e.target.value)}
+                  placeholder="Enter amount paid"
+                  style={{ fontFamily: 'Poppins, sans-serif' }}
+                />
+                {selectedProduct && (
+                  <div style={{
+                    marginTop: '0.5rem',
+                    fontSize: '0.8rem',
+                    color: 'var(--text-muted)',
+                    fontFamily: 'Poppins, sans-serif'
+                  }}>
+                    <div>Total: <strong style={{ color: 'var(--text-primary)' }}>KSh {fmt(totalPrice)}</strong></div>
+                    {balance > 0 ? (
+                      <div style={{ color: 'var(--accent-amber)' }}>
+                        Balance: <strong>KSh {fmt(balance)}</strong>
+                      </div>
+                    ) : balance === 0 && amountPaid > 0 ? (
+                      <div style={{ color: 'var(--accent-green)' }}>
+                        ✓ Fully Paid
+                      </div>
+                    ) : amountPaid > totalPrice ? (
+                      <div style={{ color: 'var(--accent-red)' }}>
+                        ⚠️ Amount exceeds total!
+                      </div>
+                    ) : null}
+                  </div>
+                )}
+              </div>
             </motion.div>
           )}
 
@@ -434,8 +530,20 @@ export default function SalesPage() {
             }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
                 <span style={{ fontFamily: 'Poppins, sans-serif', color: 'var(--text-primary)' }}>Total Price:</span>
-                <span style={{ fontFamily: 'Poppins, sans-serif', fontWeight: 700, color: 'var(--text-primary)' }}>KSh {fmt(selectedProduct.selling_price * parseInt(form.quantity_sold))}</span>
+                <span style={{ fontFamily: 'Poppins, sans-serif', fontWeight: 700, color: 'var(--text-primary)' }}>KSh {fmt(totalPrice)}</span>
               </div>
+              {form.payment_type === 'debt' && amountPaid > 0 && amountPaid <= totalPrice && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+                  <span style={{ fontFamily: 'Poppins, sans-serif', color: 'var(--text-primary)' }}>Amount Paid:</span>
+                  <span style={{ fontFamily: 'Poppins, sans-serif', fontWeight: 700, color: 'var(--accent-green)' }}>KSh {fmt(amountPaid)}</span>
+                </div>
+              )}
+              {form.payment_type === 'debt' && balance > 0 && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+                  <span style={{ fontFamily: 'Poppins, sans-serif', color: 'var(--text-primary)' }}>Balance:</span>
+                  <span style={{ fontFamily: 'Poppins, sans-serif', fontWeight: 700, color: 'var(--accent-amber)' }}>KSh {fmt(balance)}</span>
+                </div>
+              )}
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                 <span style={{ fontFamily: 'Poppins, sans-serif', color: 'var(--text-primary)' }}>Profit:</span>
                 <span style={{ fontFamily: 'Poppins, sans-serif', fontWeight: 700, color: 'var(--accent-green)' }}>
@@ -448,10 +556,16 @@ export default function SalesPage() {
           <button
             className="btn btn-primary"
             onClick={handleSale}
-            disabled={loading || !form.product_id}
+            disabled={
+              loading ||
+              !form.product_id ||
+              (form.payment_type === 'debt' && (!form.customer_name.trim() || !form.customer_phone.trim())) ||
+              (form.payment_type === 'debt' && (!form.amount_paid || parseFloat(form.amount_paid) < 0)) ||
+              (form.payment_type === 'debt' && parseFloat(form.amount_paid) > totalPrice)
+            }
             style={{ width: '100%', marginTop: '1rem', padding: '0.75rem', fontFamily: 'Poppins, sans-serif', color: '#0F172A' }}
           >
-            {loading ? 'Processing...' : 'Record Sale'}
+            {loading ? 'Processing...' : form.payment_type === 'debt' ? 'Record Debt' : 'Record Sale'}
           </button>
         </motion.div>
 
