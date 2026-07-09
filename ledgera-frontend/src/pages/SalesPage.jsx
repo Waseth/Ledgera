@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { motion } from 'framer-motion';
 import {
   FiShoppingCart, FiPackage, FiUser, FiPhone, FiDollarSign,
-  FiRefreshCw, FiTrendingUp
+  FiRefreshCw, FiTrendingUp, FiChevronDown
 } from 'react-icons/fi';
 import { api } from '../api/client';
 import { useToast } from '../context/ToastContext';
@@ -20,6 +20,8 @@ export default function SalesPage() {
   const [products, setProducts] = useState([]);
   const [sales, setSales] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const dropdownRef = useRef(null);
 
   const [form, setForm] = useState({
     product_id: '',
@@ -39,14 +41,23 @@ export default function SalesPage() {
       ]);
       setProducts(prods);
       setSales(s);
-
-      // Don't auto-select product here anymore
     } catch (err) {
       toast(err.message, 'error');
     }
   }, [toast]);
 
   useEffect(() => { loadAll(); }, [loadAll]);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setIsDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const selectedProduct = Array.isArray(products)
     ? products.find(p => p.id === parseInt(form.product_id))
@@ -91,14 +102,17 @@ export default function SalesPage() {
 
       toast(`Sale recorded! KSh ${fmt(res.total_price)}`, 'success');
 
-      // CLEAR ALL FORM FIELDS - Reset to initial state
+      // Reset form to default state with "Select a product..."
       setForm({
-        product_id: '',           // Clear product selection
+        product_id: '',           // Reset to empty - shows "Select a product..."
         quantity_sold: '1',       // Reset quantity to 1
         payment_type: 'cash',     // Reset payment type to cash
         customer_name: '',        // Clear customer name
         customer_phone: '',       // Clear customer phone
       });
+
+      // Close dropdown if open
+      setIsDropdownOpen(false);
 
       loadAll();
     } catch (err) {
@@ -110,6 +124,13 @@ export default function SalesPage() {
 
   const todayRevenue = Array.isArray(sales) ? sales.reduce((s, x) => s + x.total_price, 0) : 0;
   const todayProfit = Array.isArray(sales) ? sales.reduce((s, x) => s + x.profit, 0) : 0;
+
+  // Get selected product name for display
+  const getSelectedProductName = () => {
+    if (!form.product_id) return 'Select a product...';
+    const product = products.find(p => p.id === parseInt(form.product_id));
+    return product ? `${product.name} - KSh ${product.selling_price}` : 'Select a product...';
+  };
 
   return (
     <div className="page-wrapper">
@@ -190,21 +211,141 @@ export default function SalesPage() {
             <FiShoppingCart size={18} /> New Sale
           </h3>
 
-          <div className="form-group">
+          {/* Custom Dropdown */}
+          <div className="form-group" ref={dropdownRef}>
             <label className="form-label" style={{ fontFamily: 'Poppins, sans-serif' }}>Product</label>
-            <select
-              className="form-select"
-              value={form.product_id}
-              onChange={e => set('product_id')(e.target.value)}
-              style={{ fontFamily: 'Poppins, sans-serif' }}
+            <div
+              style={{ position: 'relative', cursor: 'pointer' }}
+              onClick={() => setIsDropdownOpen(!isDropdownOpen)}
             >
-              <option value="">Select a product...</option>
-              {Array.isArray(products) && products.map(p => (
-                <option key={p.id} value={p.id}>
-                  {p.name} - KSh {p.selling_price} (Stock: {p.quantity} {p.unit})
-                </option>
-              ))}
-            </select>
+              <div
+                className="form-select"
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  fontFamily: 'Poppins, sans-serif',
+                  color: form.product_id ? 'var(--text-primary)' : 'var(--text-muted)',
+                  paddingRight: '2.5rem',
+                  userSelect: 'none',
+                  background: 'var(--bg-surface)',
+                  border: '1.5px solid var(--border-medium)',
+                  borderRadius: 'var(--radius-md)',
+                  padding: '0.6rem 0.85rem',
+                }}
+              >
+                <span>{getSelectedProductName()}</span>
+                <FiChevronDown
+                  size={18}
+                  style={{
+                    position: 'absolute',
+                    right: '0.75rem',
+                    top: '50%',
+                    transform: `translateY(-50%) ${isDropdownOpen ? 'rotate(180deg)' : ''}`,
+                    transition: 'transform 0.2s',
+                    color: 'var(--text-muted)'
+                  }}
+                />
+              </div>
+
+              {isDropdownOpen && (
+                <motion.div
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                  transition={{ duration: 0.15 }}
+                  style={{
+                    position: 'absolute',
+                    top: '100%',
+                    left: 0,
+                    right: 0,
+                    marginTop: '0.25rem',
+                    background: 'var(--bg-surface)',
+                    border: '1px solid var(--border-medium)',
+                    borderRadius: 'var(--radius-md)',
+                    boxShadow: 'var(--shadow-lg)',
+                    maxHeight: '250px',
+                    overflowY: 'auto',
+                    zIndex: 50,
+                  }}
+                >
+                  <div
+                    style={{
+                      padding: '0.5rem 0.75rem',
+                      cursor: 'pointer',
+                      fontFamily: 'Poppins, sans-serif',
+                      color: 'var(--text-muted)',
+                      fontSize: '0.85rem',
+                      borderBottom: '1px solid var(--border-subtle)',
+                      background: 'var(--bg-surface)',
+                    }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      set('product_id')('');
+                      setIsDropdownOpen(false);
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = 'var(--bg-card-hover)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = 'var(--bg-surface)';
+                    }}
+                  >
+                    Select a product...
+                  </div>
+                  {Array.isArray(products) && products.map(p => (
+                    <div
+                      key={p.id}
+                      style={{
+                        padding: '0.5rem 0.75rem',
+                        cursor: 'pointer',
+                        fontFamily: 'Poppins, sans-serif',
+                        fontSize: '0.85rem',
+                        borderBottom: '1px solid var(--border-subtle)',
+                        background: parseInt(form.product_id) === p.id ? 'var(--primary-blue-dim)' : 'var(--bg-surface)',
+                        transition: 'background 0.15s',
+                      }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        set('product_id')(String(p.id));
+                        setIsDropdownOpen(false);
+                      }}
+                      onMouseEnter={(e) => {
+                        if (parseInt(form.product_id) !== p.id) {
+                          e.currentTarget.style.background = 'var(--bg-card-hover)';
+                        }
+                      }}
+                      onMouseLeave={(e) => {
+                        if (parseInt(form.product_id) !== p.id) {
+                          e.currentTarget.style.background = 'var(--bg-surface)';
+                        }
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ fontWeight: parseInt(form.product_id) === p.id ? 600 : 400, color: 'var(--text-primary)' }}>
+                          {p.name}
+                        </span>
+                        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                          KSh {p.selling_price} | Stock: {p.quantity}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                  {Array.isArray(products) && products.length === 0 && (
+                    <div style={{
+                      padding: '1rem 0.75rem',
+                      textAlign: 'center',
+                      color: 'var(--text-muted)',
+                      fontFamily: 'Poppins, sans-serif',
+                      fontSize: '0.85rem',
+                      background: 'var(--bg-surface)',
+                    }}>
+                      No products available
+                    </div>
+                  )}
+                </motion.div>
+              )}
+            </div>
           </div>
 
           {selectedProduct && (
@@ -218,7 +359,7 @@ export default function SalesPage() {
               alignItems: 'center',
             }}>
               <span style={{ fontFamily: 'Poppins, sans-serif', fontSize: '0.8rem', color: 'var(--text-muted)' }}>Available Stock</span>
-              <span style={{ fontFamily: 'Poppins, sans-serif', fontWeight: 600, fontSize: '1rem' }}>{selectedProduct.quantity} {selectedProduct.unit}</span>
+              <span style={{ fontFamily: 'Poppins, sans-serif', fontWeight: 600, fontSize: '1rem', color: 'var(--text-primary)' }}>{selectedProduct.quantity} {selectedProduct.unit}</span>
             </div>
           )}
 
@@ -287,16 +428,16 @@ export default function SalesPage() {
             <div style={{
               marginTop: '1rem',
               padding: '0.75rem',
-              background: 'var(--bg-surface)',
+              background: 'var(--bg-base)',
               borderRadius: 'var(--radius-md)',
               border: '1px solid var(--border-medium)',
             }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
-                <span style={{ fontFamily: 'Poppins, sans-serif' }}>Total Price:</span>
-                <span style={{ fontFamily: 'Poppins, sans-serif', fontWeight: 700 }}>KSh {fmt(selectedProduct.selling_price * parseInt(form.quantity_sold))}</span>
+                <span style={{ fontFamily: 'Poppins, sans-serif', color: 'var(--text-primary)' }}>Total Price:</span>
+                <span style={{ fontFamily: 'Poppins, sans-serif', fontWeight: 700, color: 'var(--text-primary)' }}>KSh {fmt(selectedProduct.selling_price * parseInt(form.quantity_sold))}</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ fontFamily: 'Poppins, sans-serif' }}>Profit:</span>
+                <span style={{ fontFamily: 'Poppins, sans-serif', color: 'var(--text-primary)' }}>Profit:</span>
                 <span style={{ fontFamily: 'Poppins, sans-serif', fontWeight: 700, color: 'var(--accent-green)' }}>
                   KSh {fmt((selectedProduct.selling_price - selectedProduct.buying_price) * parseInt(form.quantity_sold))}
                 </span>
@@ -353,9 +494,9 @@ export default function SalesPage() {
                   )}
                   {Array.isArray(sales) && sales.map(s => (
                     <tr key={s.id}>
-                      <td style={{ fontFamily: 'Poppins, sans-serif', fontWeight: 500, whiteSpace: 'nowrap' }}>{s.product_name}</td>
-                      <td style={{ fontFamily: 'Poppins, sans-serif' }}>{s.quantity_sold}</td>
-                      <td style={{ fontFamily: 'Poppins, sans-serif', whiteSpace: 'nowrap' }}>KSh {fmt(s.total_price)}</td>
+                      <td style={{ fontFamily: 'Poppins, sans-serif', fontWeight: 500, whiteSpace: 'nowrap', color: 'var(--text-primary)' }}>{s.product_name}</td>
+                      <td style={{ fontFamily: 'Poppins, sans-serif', color: 'var(--text-primary)' }}>{s.quantity_sold}</td>
+                      <td style={{ fontFamily: 'Poppins, sans-serif', whiteSpace: 'nowrap', color: 'var(--text-primary)' }}>KSh {fmt(s.total_price)}</td>
                       <td>
                         <span className={`badge ${s.payment_type === 'cash' ? 'badge-success' : 'badge-warning'}`} style={{ fontFamily: 'Poppins, sans-serif', whiteSpace: 'nowrap' }}>
                           {s.payment_type === 'cash' ? 'Cash' : 'Debt'}
