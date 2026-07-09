@@ -3,7 +3,7 @@ from flask import request, jsonify
 
 from app.debts import debts_bp
 from app.extensions import db
-from app.models import Debt, Sale, Product, AuditLog
+from app.models import Debt, Sale, Product, AuditLog, DebtCollection
 from app.auth.routes import token_required
 
 
@@ -62,17 +62,32 @@ def mark_paid(debt_id):
     if user_role != 'shopkeeper':
         return jsonify({"error": "Only shopkeepers can collect payments"}), 403
 
-    row = db.session.query(Debt.id, Debt.is_paid).filter(Debt.id == debt_id).first()
-    if not row:
+    debt = db.session.query(Debt).filter(Debt.id == debt_id).first()
+    if not debt:
         return jsonify({"error": "Debt not found."}), 404
-    if row.is_paid:
+    if debt.is_paid:
         return jsonify({"error": "Debt is already marked as paid."}), 409
 
     now = datetime.utcnow()
-    db.session.query(Debt).filter(Debt.id == debt_id).update(
-        {"is_paid": True, "paid_at": now, "amount": 0},
-        synchronize_session=False,
-    )
+
+    # Record the final collection
+    if debt.amount > 0:
+        collection = DebtCollection(
+            debt_id=debt.id,
+            user_id=user_id,
+            amount=debt.amount,
+            collected_at=now
+        )
+        db.session.add(collection)
+
+        # Update total amount paid
+        current_paid = debt.amount_paid if debt.amount_paid is not None else 0
+        debt.amount_paid = current_paid + debt.amount
+
+    debt.is_paid = True
+    debt.paid_at = now
+    debt.amount = 0
+
     db.session.add(AuditLog(
         user_id=user_id,
         action="mark_debt_paid",
@@ -118,6 +133,15 @@ def partial_pay_debt(debt_id):
     new_balance = round(debt.amount - amount_paid, 2)
     current_paid = debt.amount_paid if debt.amount_paid is not None else 0
     new_total_paid = current_paid + amount_paid
+
+    # Record the collection
+    collection = DebtCollection(
+        debt_id=debt.id,
+        user_id=user_id,
+        amount=amount_paid,
+        collected_at=now
+    )
+    db.session.add(collection)
 
     if new_balance == 0:
         debt.is_paid = True

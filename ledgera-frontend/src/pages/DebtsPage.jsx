@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { FiDollarSign, FiUsers, FiSearch, FiRefreshCw, FiCheckCircle, FiAlertCircle } from 'react-icons/fi';
+import { FiDollarSign, FiUsers, FiSearch, FiRefreshCw, FiCheckCircle, FiAlertCircle, FiEdit2 } from 'react-icons/fi';
 import { api } from '../api/client';
 import { useToast } from '../context/ToastContext';
 import { useAuth } from '../context/AuthContext';
@@ -25,6 +25,8 @@ export default function DebtsPage() {
   const [showPaid, setShowPaid] = useState(false);
   const [search, setSearch] = useState('');
   const [confirm, setConfirm] = useState(null);
+  const [paymentAmount, setPaymentAmount] = useState('');
+  const [isPartialPayment, setIsPartialPayment] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -63,11 +65,35 @@ export default function DebtsPage() {
 
   useEffect(() => { load(); }, [load]);
 
-  const markPaid = async (id) => {
+  const handleMarkPaid = async (id) => {
+    const debt = debts.find(d => d.id === id);
+    if (!debt) return;
+
+    const amountPaid = parseFloat(paymentAmount) || debt.amount;
+
+    // Validate amount
+    if (amountPaid <= 0) {
+      toast('Amount must be greater than 0.', 'warning');
+      return;
+    }
+    if (amountPaid > debt.amount) {
+      toast(`Amount cannot exceed remaining balance of KSh ${fmt(debt.amount)}`, 'warning');
+      return;
+    }
+
     try {
-      await api.post(`/debts/${id}/pay`, {});
-      toast('Debt marked as paid ✓', 'success');
+      if (amountPaid === debt.amount) {
+        // Full payment - use the /pay endpoint
+        await api.post(`/debts/${id}/pay`, {});
+        toast('Debt fully paid ✓', 'success');
+      } else {
+        // Partial payment - use the /partial-pay endpoint
+        await api.post(`/debts/${id}/partial-pay`, { amount_paid: amountPaid });
+        toast(`Payment of KSh ${fmt(amountPaid)} recorded. Remaining: KSh ${fmt(debt.amount - amountPaid)}`, 'success');
+      }
       setConfirm(null);
+      setPaymentAmount('');
+      setIsPartialPayment(false);
       load();
     } catch (err) {
       toast(err.message, 'error');
@@ -83,6 +109,16 @@ export default function DebtsPage() {
   );
 
   const confirmDebt = safeDebts.find(d => d.id === confirm);
+
+  // Reset payment amount when modal opens
+  const openPaymentModal = (debtId) => {
+    const debt = safeDebts.find(d => d.id === debtId);
+    if (debt) {
+      setPaymentAmount(String(debt.amount));
+      setIsPartialPayment(false);
+      setConfirm(debtId);
+    }
+  };
 
   return (
     <div className="page-wrapper">
@@ -223,6 +259,7 @@ export default function DebtsPage() {
                 <th style={{ fontFamily: 'Poppins, sans-serif' }}>Phone</th>
                 <th style={{ fontFamily: 'Poppins, sans-serif' }}>Product</th>
                 <th style={{ fontFamily: 'Poppins, sans-serif' }}>Amount (KSh)</th>
+                <th style={{ fontFamily: 'Poppins, sans-serif' }}>Paid (KSh)</th>
                 <th style={{ fontFamily: 'Poppins, sans-serif' }}>Date</th>
                 <th style={{ fontFamily: 'Poppins, sans-serif' }}>Status</th>
                 <th style={{ fontFamily: 'Poppins, sans-serif' }}>Action</th>
@@ -232,7 +269,7 @@ export default function DebtsPage() {
               {loading && (
                 [...Array(5)].map((_, i) => (
                   <tr key={i}>
-                    {[...Array(7)].map((__, j) => (
+                    {[...Array(8)].map((__, j) => (
                       <td key={j}><div className="skeleton" style={{ height: 14, width: '75%', borderRadius: 4 }} /></td>
                     ))}
                   </tr>
@@ -240,7 +277,7 @@ export default function DebtsPage() {
               )}
               {!loading && displayed.length === 0 && (
                 <tr>
-                  <td colSpan={7}>
+                  <td colSpan={8}>
                     <div style={{
                       display: 'flex',
                       flexDirection: 'column',
@@ -276,6 +313,9 @@ export default function DebtsPage() {
                   <td className="td-mono" style={{ fontFamily: 'Poppins, sans-serif', fontWeight: 600, color: d.is_paid ? 'var(--accent-green)' : 'var(--accent-amber)', whiteSpace: 'nowrap' }}>
                     {fmt(d.amount)}
                   </td>
+                  <td className="td-mono" style={{ fontFamily: 'Poppins, sans-serif', color: 'var(--accent-green)', whiteSpace: 'nowrap' }}>
+                    {fmt(d.amount_paid || 0)}
+                  </td>
                   <td className="td-mono" style={{ fontFamily: 'Poppins, sans-serif', color: 'var(--text-muted)', fontSize: '0.8rem', whiteSpace: 'nowrap' }}>
                     {d.created_at?.substring(0, 10)}
                   </td>
@@ -288,10 +328,10 @@ export default function DebtsPage() {
                     {!d.is_paid && user?.role === 'shopkeeper' && (
                       <button
                         className="btn btn-primary btn-sm"
-                        onClick={() => setConfirm(d.id)}
+                        onClick={() => openPaymentModal(d.id)}
                         style={{ fontFamily: 'Poppins, sans-serif', color: '#0F172A' }}
                       >
-                        Mark Paid
+                        <FiEdit2 size={12} style={{ marginRight: '0.25rem' }} /> Pay
                       </button>
                     )}
                   </td>
@@ -302,12 +342,16 @@ export default function DebtsPage() {
         </div>
       </motion.div>
 
-      {/* Confirm pay modal */}
+      {/* Payment Modal */}
       <Modal
         open={!!confirm}
-        onClose={() => setConfirm(null)}
-        title="Confirm Payment"
-        maxWidth={380}
+        onClose={() => {
+          setConfirm(null);
+          setPaymentAmount('');
+          setIsPartialPayment(false);
+        }}
+        title="Record Payment"
+        maxWidth={420}
       >
         {confirmDebt && (
           <>
@@ -323,25 +367,97 @@ export default function DebtsPage() {
                 { label: 'Customer', value: confirmDebt.customer_name },
                 { label: 'Phone', value: confirmDebt.customer_phone },
                 { label: 'Product', value: confirmDebt.product_name },
-                { label: 'Amount', value: `KSh ${fmt(confirmDebt.amount)}` },
+                { label: 'Total Amount', value: `KSh ${fmt(confirmDebt.initial_amount || confirmDebt.amount)}` },
+                { label: 'Already Paid', value: `KSh ${fmt(confirmDebt.amount_paid || 0)}` },
+                { label: 'Remaining Balance', value: `KSh ${fmt(confirmDebt.amount)}`, color: 'var(--accent-amber)' },
               ].map(row => (
                 <div key={row.label} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.875rem' }}>
                   <span style={{ fontFamily: 'Poppins, sans-serif', fontWeight: 700, fontSize: '0.78rem', letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-secondary)' }}>
                     {row.label}
                   </span>
-                  <span style={{ fontFamily: 'Poppins, sans-serif', fontWeight: row.label === 'Amount' ? 600 : 400, color: row.label === 'Amount' ? 'var(--accent-green)' : 'var(--text-primary)' }}>
+                  <span style={{
+                    fontFamily: 'Poppins, sans-serif',
+                    fontWeight: row.label === 'Remaining Balance' ? 700 : 400,
+                    color: row.color || 'var(--text-primary)'
+                  }}>
                     {row.value}
                   </span>
                 </div>
               ))}
             </div>
-            <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)', marginBottom: '1.25rem', fontFamily: 'Poppins, sans-serif' }}>
-              This action cannot be undone. The debt will be permanently marked as paid.
+
+            <div className="form-group">
+              <label className="form-label" style={{ fontFamily: 'Poppins, sans-serif' }}>
+                <FiDollarSign size={12} style={{ display: 'inline', marginRight: '0.25rem' }} />
+                Amount to Pay (KSh)
+              </label>
+              <input
+                className="form-input"
+                type="number"
+                min="0.01"
+                step="0.01"
+                value={paymentAmount}
+                onChange={e => {
+                  const val = parseFloat(e.target.value);
+                  setPaymentAmount(e.target.value);
+                  setIsPartialPayment(val < confirmDebt.amount);
+                }}
+                style={{ fontFamily: 'Poppins, sans-serif', fontWeight: 600 }}
+              />
+              <div style={{
+                marginTop: '0.5rem',
+                fontSize: '0.75rem',
+                color: 'var(--text-muted)',
+                fontFamily: 'Poppins, sans-serif'
+              }}>
+                {parseFloat(paymentAmount) < confirmDebt.amount && parseFloat(paymentAmount) > 0 && (
+                  <span style={{ color: 'var(--accent-amber)' }}>
+                    Partial payment: Remaining will be KSh {fmt(confirmDebt.amount - parseFloat(paymentAmount))}
+                  </span>
+                )}
+                {parseFloat(paymentAmount) === confirmDebt.amount && confirmDebt.amount > 0 && (
+                  <span style={{ color: 'var(--accent-green)' }}>
+                    ✓ Full payment - Debt will be marked as paid
+                  </span>
+                )}
+                {parseFloat(paymentAmount) > confirmDebt.amount && (
+                  <span style={{ color: 'var(--accent-red)' }}>
+                    ⚠️ Amount exceeds remaining balance!
+                  </span>
+                )}
+              </div>
             </div>
+
+            <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)', marginBottom: '1.25rem', fontFamily: 'Poppins, sans-serif' }}>
+              {parseFloat(paymentAmount) === confirmDebt.amount ? (
+                'This will mark the debt as fully paid.'
+              ) : parseFloat(paymentAmount) > 0 && parseFloat(paymentAmount) < confirmDebt.amount ? (
+                'This will reduce the remaining balance.'
+              ) : (
+                'Enter the amount the customer is paying.'
+              )}
+            </div>
+
             <div className="modal-footer">
-              <button className="btn btn-outline" onClick={() => setConfirm(null)} style={{ fontFamily: 'Poppins, sans-serif' }}>Cancel</button>
-              <button className="btn btn-primary" onClick={() => markPaid(confirm)} style={{ fontFamily: 'Poppins, sans-serif', color: '#0F172A' }}>
-                <FiCheckCircle size={14} /> Confirm Payment
+              <button
+                className="btn btn-outline"
+                onClick={() => {
+                  setConfirm(null);
+                  setPaymentAmount('');
+                  setIsPartialPayment(false);
+                }}
+                style={{ fontFamily: 'Poppins, sans-serif' }}
+              >
+                Cancel
+              </button>
+              <button
+                className="btn btn-primary"
+                onClick={() => handleMarkPaid(confirm)}
+                disabled={!paymentAmount || parseFloat(paymentAmount) <= 0 || parseFloat(paymentAmount) > confirmDebt.amount}
+                style={{ fontFamily: 'Poppins, sans-serif', color: '#0F172A' }}
+              >
+                <FiCheckCircle size={14} />
+                {parseFloat(paymentAmount) === confirmDebt.amount ? 'Confirm Full Payment' : 'Confirm Payment'}
               </button>
             </div>
           </>

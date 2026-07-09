@@ -17,6 +17,7 @@ class User(UserMixin, db.Model):
 
     sales = db.relationship("Sale", backref="seller", lazy="dynamic")
     audit_logs = db.relationship("AuditLog", backref="actor", lazy="dynamic")
+    debt_collections = db.relationship("DebtCollection", backref="collector", lazy="dynamic")
 
     def __repr__(self):
         return f"<User {self.email}>"
@@ -100,6 +101,7 @@ class Debt(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
     sale = db.relationship("Sale", backref=db.backref("debt", uselist=False))
+    collections = db.relationship("DebtCollection", backref="debt", lazy="dynamic")
 
     __table_args__ = (
         Index("idx_debt_paid", "is_paid"),
@@ -108,6 +110,24 @@ class Debt(db.Model):
 
     def __repr__(self):
         return f"<Debt {self.customer_name} amount={self.amount} paid={self.is_paid}>"
+
+
+class DebtCollection(db.Model):
+    __tablename__ = "debt_collections"
+
+    id = db.Column(db.Integer, primary_key=True)
+    debt_id = db.Column(db.Integer, db.ForeignKey("debts.id"), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+    amount = db.Column(db.Float, nullable=False)
+    collected_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    __table_args__ = (
+        Index("idx_debt_collection_debt", "debt_id"),
+        Index("idx_debt_collection_date", "collected_at"),
+    )
+
+    def __repr__(self):
+        return f"<DebtCollection debt_id={self.debt_id} amount={self.amount}>"
 
 
 class Notification(db.Model):

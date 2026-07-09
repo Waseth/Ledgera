@@ -113,6 +113,16 @@ def log_sale():
             )
             db.session.add(debt)
 
+            if amount_paid > 0:
+                from app.models import DebtCollection
+                collection = DebtCollection(
+                    debt_id=debt.id,
+                    user_id=user_id,
+                    amount=amount_paid,
+                    collected_at=datetime.utcnow()
+                )
+                db.session.add(collection)
+
         db.session.add(AuditLog(
             user_id=user_id,
             action="log_sale",

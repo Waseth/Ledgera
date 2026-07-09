@@ -1,24 +1,15 @@
-"""
-reports/routes.py – Daily, weekly, monthly reports + admin dashboard.
-"""
-
 from datetime import date, datetime, timedelta
 from flask import jsonify, request
 from sqlalchemy import func
 
 from app.reports import reports_bp
 from app.extensions import db
-from app.models import Sale, Expense, Debt, Product, Notification, MonthlySnapshot
+from app.models import Sale, Expense, Debt, Product, Notification, MonthlySnapshot, DebtCollection
 from app.reports.dashboard_html import ADMIN_DASHBOARD_HTML
 from app.auth.routes import token_required
 
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
 def _date_range_from_request():
-    """Parse ?start=YYYY-MM-DD&end=YYYY-MM-DD or default to today."""
     today = date.today()
     try:
         start = date.fromisoformat(request.args.get("start", today.isoformat()))
@@ -29,7 +20,6 @@ def _date_range_from_request():
 
 
 def _sales_aggregates(start: date, end: date):
-    """Returns aggregates for the given date range."""
     result = db.session.query(
         func.coalesce(func.sum(Sale.total_price), 0.0).label("revenue"),
         func.coalesce(func.sum(Sale.profit), 0.0).label("profit"),
@@ -51,6 +41,16 @@ def _sales_aggregates(start: date, end: date):
     return result
 
 
+def _debt_collections(start: date, end: date):
+    result = db.session.query(
+        func.coalesce(func.sum(DebtCollection.amount), 0.0)
+    ).filter(
+        db.func.date(DebtCollection.collected_at) >= start,
+        db.func.date(DebtCollection.collected_at) <= end
+    ).scalar() or 0.0
+    return result
+
+
 def _expenses_total(start: date, end: date):
     return db.session.query(
         func.coalesce(func.sum(Expense.amount), 0.0)
@@ -60,30 +60,24 @@ def _expenses_total(start: date, end: date):
     ).scalar()
 
 
-# ---------------------------------------------------------------------------
-# Monthly Snapshot Helpers
-# ---------------------------------------------------------------------------
-
 def save_monthly_snapshot(year, month):
-    """Calculate and save monthly totals to snapshots table."""
-    # Calculate date range
     start = date(year, month, 1)
     if month == 12:
         end = date(year + 1, 1, 1) - timedelta(days=1)
     else:
         end = date(year, month + 1, 1) - timedelta(days=1)
 
-    # Get aggregates
     agg = _sales_aggregates(start, end)
+    collections = _debt_collections(start, end)
     expenses = _expenses_total(start, end)
+
+    total_actual_revenue = agg.cash_revenue + collections
     net_profit = round(agg.profit - expenses, 2)
 
-    # Check if snapshot exists
     snapshot = MonthlySnapshot.query.filter_by(year=year, month=month).first()
 
     if snapshot:
-        # Update existing
-        snapshot.total_revenue = agg.revenue
+        snapshot.total_revenue = total_actual_revenue
         snapshot.total_profit = agg.profit
         snapshot.cash_revenue = agg.cash_revenue
         snapshot.debt_revenue = agg.debt_revenue
@@ -92,11 +86,10 @@ def save_monthly_snapshot(year, month):
         snapshot.sale_count = agg.count
         snapshot.updated_at = datetime.utcnow()
     else:
-        # Create new
         snapshot = MonthlySnapshot(
             year=year,
             month=month,
-            total_revenue=agg.revenue,
+            total_revenue=total_actual_revenue,
             total_profit=agg.profit,
             cash_revenue=agg.cash_revenue,
             debt_revenue=agg.debt_revenue,
@@ -110,32 +103,30 @@ def save_monthly_snapshot(year, month):
     return snapshot
 
 
-# ---------------------------------------------------------------------------
-# GET /reports/daily
-# ---------------------------------------------------------------------------
 @reports_bp.route("/daily", methods=["GET"])
 @token_required
 def daily_report():
     start, end = _date_range_from_request()
     agg = _sales_aggregates(start, start)
+    collections = _debt_collections(start, start)
     expenses = _expenses_total(start, start)
+
+    total_actual_revenue = agg.cash_revenue + collections
     net_profit = round(agg.profit - expenses, 2)
 
     return jsonify({
         "date": start.isoformat(),
-        "revenue": round(agg.revenue, 2),
-        "profit": round(agg.profit, 2),
+        "total_revenue": round(total_actual_revenue, 2),
         "cash_revenue": round(agg.cash_revenue, 2),
-        "debt_revenue": round(agg.debt_revenue, 2),
+        "debt_sales": round(agg.debt_revenue, 2),
+        "debt_collections": round(collections, 2),
+        "profit": round(agg.profit, 2),
         "expenses": round(expenses, 2),
         "net_profit": net_profit,
         "sale_count": agg.count,
     }), 200
 
 
-# ---------------------------------------------------------------------------
-# GET /reports/weekly
-# ---------------------------------------------------------------------------
 @reports_bp.route("/weekly", methods=["GET"])
 @token_required
 def weekly_report():
@@ -143,7 +134,10 @@ def weekly_report():
     start = today - timedelta(days=6)
 
     agg = _sales_aggregates(start, today)
+    collections = _debt_collections(start, today)
     expenses = _expenses_total(start, today)
+
+    total_actual_revenue = agg.cash_revenue + collections
     net_profit = round(agg.profit - expenses, 2)
 
     daily_rows = (
@@ -165,7 +159,10 @@ def weekly_report():
     return jsonify({
         "start": start.isoformat(),
         "end": today.isoformat(),
-        "total_revenue": round(agg.revenue, 2),
+        "total_revenue": round(total_actual_revenue, 2),
+        "cash_revenue": round(agg.cash_revenue, 2),
+        "debt_sales": round(agg.debt_revenue, 2),
+        "debt_collections": round(collections, 2),
         "total_profit": round(agg.profit, 2),
         "total_expenses": round(expenses, 2),
         "net_profit": net_profit,
@@ -182,9 +179,6 @@ def weekly_report():
     }), 200
 
 
-# ---------------------------------------------------------------------------
-# GET /reports/monthly
-# ---------------------------------------------------------------------------
 @reports_bp.route("/monthly", methods=["GET"])
 @token_required
 def monthly_report():
@@ -209,10 +203,12 @@ def monthly_report():
         year, mon = start.year, start.month
 
     agg = _sales_aggregates(start, end)
+    collections = _debt_collections(start, end)
     expenses = _expenses_total(start, end)
+
+    total_actual_revenue = agg.cash_revenue + collections
     net_profit = round(agg.profit - expenses, 2)
 
-    # Save snapshot for future comparison
     if save_to_db:
         save_monthly_snapshot(year, mon)
 
@@ -238,10 +234,11 @@ def monthly_report():
         "month": f"{year}-{mon:02d}",
         "start": start.isoformat(),
         "end": end.isoformat(),
-        "total_revenue": round(agg.revenue, 2),
-        "total_profit": round(agg.profit, 2),
+        "total_revenue": round(total_actual_revenue, 2),
         "cash_revenue": round(agg.cash_revenue, 2),
-        "debt_revenue": round(agg.debt_revenue, 2),
+        "debt_sales": round(agg.debt_revenue, 2),
+        "debt_collections": round(collections, 2),
+        "total_profit": round(agg.profit, 2),
         "total_expenses": round(expenses, 2),
         "net_profit": net_profit,
         "sale_count": agg.count,
@@ -257,13 +254,9 @@ def monthly_report():
     }), 200
 
 
-# ---------------------------------------------------------------------------
-# GET /reports/monthly/history  – get all saved monthly snapshots
-# ---------------------------------------------------------------------------
 @reports_bp.route("/monthly/history", methods=["GET"])
 @token_required
 def monthly_history():
-    """Get all saved monthly snapshots for comparison."""
     snapshots = MonthlySnapshot.query.order_by(
         MonthlySnapshot.year.desc(),
         MonthlySnapshot.month.desc()
@@ -288,16 +281,9 @@ def monthly_history():
     ]), 200
 
 
-# ---------------------------------------------------------------------------
-# GET /reports/monthly/compare  – compare two months
-# ---------------------------------------------------------------------------
 @reports_bp.route("/monthly/compare", methods=["GET"])
 @token_required
 def compare_months():
-    """
-    Compare two months.
-    Query params: month1=YYYY-MM, month2=YYYY-MM
-    """
     month1_str = request.args.get("month1")
     month2_str = request.args.get("month2")
 
@@ -310,17 +296,14 @@ def compare_months():
     except (ValueError, TypeError):
         return jsonify({"error": "Invalid month format. Use YYYY-MM"}), 400
 
-    # Get snapshots or calculate on the fly
     snap1 = MonthlySnapshot.query.filter_by(year=y1, month=m1).first()
     snap2 = MonthlySnapshot.query.filter_by(year=y2, month=m2).first()
 
-    # If snapshots don't exist, calculate them
     if not snap1:
         snap1 = save_monthly_snapshot(y1, m1)
     if not snap2:
         snap2 = save_monthly_snapshot(y2, m2)
 
-    # Calculate differences
     revenue_diff = snap2.total_revenue - snap1.total_revenue
     profit_diff = snap2.total_profit - snap1.total_profit
     net_profit_diff = snap2.net_profit - snap1.net_profit
@@ -353,9 +336,6 @@ def compare_months():
     }), 200
 
 
-# ---------------------------------------------------------------------------
-# GET /reports/product-performance
-# ---------------------------------------------------------------------------
 @reports_bp.route("/product-performance", methods=["GET"])
 @token_required
 def product_performance():
@@ -442,9 +422,6 @@ def product_performance():
     }), 200
 
 
-# ---------------------------------------------------------------------------
-# GET /reports/top-products
-# ---------------------------------------------------------------------------
 @reports_bp.route("/top-products", methods=["GET"])
 @token_required
 def top_products():
@@ -495,9 +472,6 @@ def top_products():
     }), 200
 
 
-# ---------------------------------------------------------------------------
-# GET /reports/dashboard
-# ---------------------------------------------------------------------------
 @reports_bp.route("/dashboard", methods=["GET"])
 @token_required
 def dashboard_admin():
@@ -511,8 +485,13 @@ def dashboard_admin():
 
     today_agg = _sales_aggregates(today, today)
     week_agg = _sales_aggregates(week_start, today)
+    today_collections = _debt_collections(today, today)
+    week_collections = _debt_collections(week_start, today)
     today_exp = _expenses_total(today, today)
     week_exp = _expenses_total(week_start, today)
+
+    today_total_revenue = today_agg.cash_revenue + today_collections
+    week_total_revenue = week_agg.cash_revenue + week_collections
 
     debt_total = db.session.query(
         func.coalesce(func.sum(Debt.amount), 0.0)
@@ -526,14 +505,20 @@ def dashboard_admin():
 
     return jsonify({
         "today": {
-            "revenue": round(today_agg.revenue, 2),
+            "revenue": round(today_total_revenue, 2),
+            "cash_revenue": round(today_agg.cash_revenue, 2),
+            "debt_sales": round(today_agg.debt_revenue, 2),
+            "debt_collections": round(today_collections, 2),
             "profit": round(today_agg.profit, 2),
             "expenses": round(today_exp, 2),
             "net_profit": round(today_agg.profit - today_exp, 2),
             "sale_count": today_agg.count,
         },
         "week": {
-            "revenue": round(week_agg.revenue, 2),
+            "revenue": round(week_total_revenue, 2),
+            "cash_revenue": round(week_agg.cash_revenue, 2),
+            "debt_sales": round(week_agg.debt_revenue, 2),
+            "debt_collections": round(week_collections, 2),
             "profit": round(week_agg.profit, 2),
             "expenses": round(week_exp, 2),
             "net_profit": round(week_agg.profit - week_exp, 2),
@@ -545,9 +530,6 @@ def dashboard_admin():
     }), 200
 
 
-# ---------------------------------------------------------------------------
-# GET /reports/notifications
-# ---------------------------------------------------------------------------
 @reports_bp.route("/notifications", methods=["GET"])
 @token_required
 def get_notifications():
@@ -570,9 +552,6 @@ def get_notifications():
     ]), 200
 
 
-# ---------------------------------------------------------------------------
-# POST /reports/notifications/<id>/read
-# ---------------------------------------------------------------------------
 @reports_bp.route("/notifications/<int:notif_id>/read", methods=["POST"])
 @token_required
 def mark_notification_read(notif_id):
@@ -582,9 +561,6 @@ def mark_notification_read(notif_id):
     return jsonify({"message": "Notification marked as read"}), 200
 
 
-# ---------------------------------------------------------------------------
-# POST /reports/notifications/read-all
-# ---------------------------------------------------------------------------
 @reports_bp.route("/notifications/read-all", methods=["POST"])
 @token_required
 def mark_all_notifications_read():
@@ -597,10 +573,6 @@ def mark_all_notifications_read():
     db.session.commit()
     return jsonify({"message": "All notifications marked as read"}), 200
 
-
-# ---------------------------------------------------------------------------
-# HTML page routes
-# ---------------------------------------------------------------------------
 
 @reports_bp.route("/dashboard-page", methods=["GET"])
 @token_required
@@ -622,17 +594,10 @@ def weekly_page():
 def monthly_page():
     return _simple_report_html("Monthly Report", "monthly"), 200
 
-# ---------------------------------------------------------------------------
-# GET /reports/weekly-by-month  – weekly breakdown for a specific month
-# ---------------------------------------------------------------------------
+
 @reports_bp.route("/weekly-by-month", methods=["GET"])
 @token_required
 def weekly_by_month():
-    """
-    Returns weekly breakdown for a specific month.
-    Query params: month=YYYY-MM (default: current month)
-    Returns weeks 1, 2, 3, 4 with their totals.
-    """
     from calendar import monthrange
     from datetime import date, timedelta
 
@@ -645,7 +610,6 @@ def weekly_by_month():
             today = date.today()
             year, mon = today.year, today.month
 
-        # Get first and last day of month
         start = date(year, mon, 1)
         last_day = monthrange(year, mon)[1]
         end = date(year, mon, last_day)
@@ -657,44 +621,39 @@ def weekly_by_month():
         last_day = monthrange(year, mon)[1]
         end = date(year, mon, last_day)
 
-    # Calculate week boundaries
-    weeks = []
+    weeks_config = []
 
-    # Week 1: Days 1-7
     week1_start = start
     week1_end = date(year, mon, min(7, last_day))
+    weeks_config.append({"week": 1, "start": week1_start, "end": week1_end, "name": "Week 1"})
 
-    # Week 2: Days 8-14
-    week2_start = date(year, mon, 8) if last_day >= 8 else None
-    week2_end = date(year, mon, min(14, last_day)) if last_day >= 8 else None
+    if last_day >= 8:
+        week2_start = date(year, mon, 8)
+        week2_end = date(year, mon, min(14, last_day))
+        weeks_config.append({"week": 2, "start": week2_start, "end": week2_end, "name": "Week 2"})
 
-    # Week 3: Days 15-21
-    week3_start = date(year, mon, 15) if last_day >= 15 else None
-    week3_end = date(year, mon, min(21, last_day)) if last_day >= 15 else None
+    if last_day >= 15:
+        week3_start = date(year, mon, 15)
+        week3_end = date(year, mon, min(21, last_day))
+        weeks_config.append({"week": 3, "start": week3_start, "end": week3_end, "name": "Week 3"})
 
-    # Week 4: Days 22-28
-    week4_start = date(year, mon, 22) if last_day >= 22 else None
-    week4_end = date(year, mon, min(28, last_day)) if last_day >= 22 else None
+    if last_day >= 22:
+        week4_start = date(year, mon, 22)
+        week4_end = date(year, mon, min(28, last_day))
+        weeks_config.append({"week": 4, "start": week4_start, "end": week4_end, "name": "Week 4"})
 
-    # Week 5: Days 29-end (if exists)
-    week5_start = date(year, mon, 29) if last_day >= 29 else None
-    week5_end = end if last_day >= 29 else None
-
-    weeks_config = [
-        {"week": 1, "start": week1_start, "end": week1_end, "name": "Week 1"},
-        {"week": 2, "start": week2_start, "end": week2_end, "name": "Week 2"},
-        {"week": 3, "start": week3_start, "end": week3_end, "name": "Week 3"},
-        {"week": 4, "start": week4_start, "end": week4_end, "name": "Week 4"},
-    ]
-
-    if week5_start:
+    if last_day >= 29:
+        week5_start = date(year, mon, 29)
+        week5_end = end
         weeks_config.append({"week": 5, "start": week5_start, "end": week5_end, "name": "Week 5"})
 
     weekly_data = []
     for w in weeks_config:
         if w["start"] and w["end"]:
             agg = _sales_aggregates(w["start"], w["end"])
+            collections = _debt_collections(w["start"], w["end"])
             expenses = _expenses_total(w["start"], w["end"])
+            total_revenue = agg.cash_revenue + collections
             net_profit = round(agg.profit - expenses, 2)
 
             weekly_data.append({
@@ -702,10 +661,11 @@ def weekly_by_month():
                 "week_name": w["name"],
                 "start": w["start"].isoformat(),
                 "end": w["end"].isoformat(),
-                "total_revenue": round(agg.revenue, 2),
-                "total_profit": round(agg.profit, 2),
+                "total_revenue": round(total_revenue, 2),
                 "cash_revenue": round(agg.cash_revenue, 2),
-                "debt_revenue": round(agg.debt_revenue, 2),
+                "debt_sales": round(agg.debt_revenue, 2),
+                "debt_collections": round(collections, 2),
+                "total_profit": round(agg.profit, 2),
                 "total_expenses": round(expenses, 2),
                 "net_profit": net_profit,
                 "sale_count": agg.count
@@ -760,7 +720,10 @@ def _simple_report_html(title, endpoint):
       const res = await fetch('/reports/{endpoint}');
       const d = await res.json();
       let html = '<div class="card"><div class="grid">';
-      html += `<div class="kpi"><h4>Revenue</h4><p>KSh ${{fmt(d.total_revenue)}}</p></div>`;
+      html += `<div class="kpi"><h4>Total Revenue</h4><p>KSh ${{fmt(d.total_revenue)}}</p></div>`;
+      html += `<div class="kpi"><h4>Cash Revenue</h4><p>KSh ${{fmt(d.cash_revenue)}}</p></div>`;
+      html += `<div class="kpi"><h4>Debt Sales</h4><p>KSh ${{fmt(d.debt_sales)}}</p></div>`;
+      html += `<div class="kpi"><h4>Debt Collections</h4><p>KSh ${{fmt(d.debt_collections)}}</p></div>`;
       html += `<div class="kpi"><h4>Profit</h4><p>KSh ${{fmt(d.total_profit)}}</p></div>`;
       html += `<div class="kpi"><h4>Expenses</h4><p>KSh ${{fmt(d.total_expenses)}}</p></div>`;
       html += `<div class="kpi"><h4>Net Profit</h4><p>KSh ${{fmt(d.net_profit)}}</p></div>`;
@@ -774,7 +737,7 @@ def _simple_report_html(title, endpoint):
         html += '</tbody></table></div>';
       }}
       if (d.top_products) {{
-        html += '<div class="card"><h3 style="margin-bottom:.75rem">Top 5 Products</h3><td><thead><tr><th>Product</th><th>Units Sold</th><th>Revenue</th><th>Profit</th></tr></thead><tbody>';
+        html += '<div class="card"><h3 style="margin-bottom:.75rem">Top 5 Products</h3><table><thead><tr><th>Product</th><th>Units Sold</th><th>Revenue</th><th>Profit</th></tr></thead><tbody>';
         d.top_products.forEach(r => {{
           html += `<tr><td>${{r.name}}</td><td>${{r.units_sold}}</td><td>KSh ${{fmt(r.revenue)}}</td><td>KSh ${{fmt(r.profit)}}</td></tr>`;
         }});

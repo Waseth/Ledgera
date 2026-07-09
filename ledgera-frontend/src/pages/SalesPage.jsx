@@ -151,7 +151,16 @@ export default function SalesPage() {
     }
   };
 
-  const todayRevenue = Array.isArray(sales) ? sales.reduce((s, x) => s + x.total_price, 0) : 0;
+  // Separate revenue tracking
+  const todayCashRevenue = Array.isArray(sales)
+    ? sales.filter(s => s.payment_type === 'cash').reduce((s, x) => s + x.total_price, 0)
+    : 0;
+
+  const todayDebtSales = Array.isArray(sales)
+    ? sales.filter(s => s.payment_type === 'debt').reduce((s, x) => s + x.total_price, 0)
+    : 0;
+
+  const todayTotalRevenue = todayCashRevenue + todayDebtSales;
   const todayProfit = Array.isArray(sales) ? sales.reduce((s, x) => s + x.profit, 0) : 0;
 
   const getSelectedProductName = () => {
@@ -193,10 +202,22 @@ export default function SalesPage() {
           <div className="card stat-card">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
               <div>
-                <div className="stat-label" style={{ fontFamily: 'Poppins, sans-serif' }}>Today's Revenue</div>
-                <div className="stat-value" style={{ fontFamily: 'Poppins, sans-serif' }}>KSh {fmt(todayRevenue)}</div>
+                <div className="stat-label" style={{ fontFamily: 'Poppins, sans-serif' }}>Today's Total Sales</div>
+                <div className="stat-value" style={{ fontFamily: 'Poppins, sans-serif' }}>KSh {fmt(todayTotalRevenue)}</div>
               </div>
               <FiDollarSign size={28} color="var(--primary-blue)" style={{ opacity: 0.7 }} />
+            </div>
+          </div>
+        </motion.div>
+
+        <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.15 }}>
+          <div className="card stat-card">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+              <div>
+                <div className="stat-label" style={{ fontFamily: 'Poppins, sans-serif' }}>Cash Revenue</div>
+                <div className="stat-value" style={{ fontFamily: 'Poppins, sans-serif', color: 'var(--accent-green)' }}>KSh {fmt(todayCashRevenue)}</div>
+              </div>
+              <FiDollarSign size={28} color="var(--accent-green)" style={{ opacity: 0.7 }} />
             </div>
           </div>
         </motion.div>
@@ -205,22 +226,22 @@ export default function SalesPage() {
           <div className="card stat-card">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
               <div>
-                <div className="stat-label" style={{ fontFamily: 'Poppins, sans-serif' }}>Today's Profit</div>
-                <div className="stat-value" style={{ fontFamily: 'Poppins, sans-serif' }}>KSh {fmt(todayProfit)}</div>
+                <div className="stat-label" style={{ fontFamily: 'Poppins, sans-serif' }}>Debt Sales</div>
+                <div className="stat-value" style={{ fontFamily: 'Poppins, sans-serif', color: 'var(--accent-amber)' }}>KSh {fmt(todayDebtSales)}</div>
               </div>
-              <FiTrendingUp size={28} color="var(--accent-green)" style={{ opacity: 0.7 }} />
+              <FiUser size={28} color="var(--accent-amber)" style={{ opacity: 0.7 }} />
             </div>
           </div>
         </motion.div>
 
-        <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.3 }}>
+        <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.25 }}>
           <div className="card stat-card">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
               <div>
-                <div className="stat-label" style={{ fontFamily: 'Poppins, sans-serif' }}>Total Sales</div>
-                <div className="stat-value" style={{ fontFamily: 'Poppins, sans-serif' }}>{Array.isArray(sales) ? sales.length : 0}</div>
+                <div className="stat-label" style={{ fontFamily: 'Poppins, sans-serif' }}>Today's Profit</div>
+                <div className="stat-value" style={{ fontFamily: 'Poppins, sans-serif' }}>KSh {fmt(todayProfit)}</div>
               </div>
-              <FiShoppingCart size={28} color="var(--accent-teal)" style={{ opacity: 0.7 }} />
+              <FiTrendingUp size={28} color="var(--accent-teal)" style={{ opacity: 0.7 }} />
             </div>
           </div>
         </motion.div>
@@ -291,7 +312,7 @@ export default function SalesPage() {
                     border: '1px solid var(--border-medium)',
                     borderRadius: 'var(--radius-md)',
                     boxShadow: 'var(--shadow-lg)',
-                    maxHeight: '250px',
+                    maxHeight: '500px',
                     overflowY: 'auto',
                     zIndex: 50,
                   }}
