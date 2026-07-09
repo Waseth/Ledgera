@@ -41,8 +41,8 @@ def list_debts():
             "customer_name": r.customer_name,
             "customer_phone": r.customer_phone,
             "amount": r.amount,
-            "initial_amount": r.initial_amount,
-            "amount_paid": r.amount_paid or 0,
+            "initial_amount": r.initial_amount if r.initial_amount is not None else r.amount,
+            "amount_paid": r.amount_paid if r.amount_paid is not None else 0,
             "is_paid": r.is_paid,
             "product_name": r.product_name,
             "quantity_sold": r.quantity_sold,
@@ -116,7 +116,8 @@ def partial_pay_debt(debt_id):
 
     now = datetime.utcnow()
     new_balance = round(debt.amount - amount_paid, 2)
-    new_total_paid = (debt.amount_paid or 0) + amount_paid
+    current_paid = debt.amount_paid if debt.amount_paid is not None else 0
+    new_total_paid = current_paid + amount_paid
 
     if new_balance == 0:
         debt.is_paid = True
