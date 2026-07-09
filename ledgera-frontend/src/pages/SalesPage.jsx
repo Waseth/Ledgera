@@ -29,7 +29,7 @@ export default function SalesPage() {
     payment_type: 'cash',
     customer_name: '',
     customer_phone: '',
-    amount_paid: '', // For partial debt payments
+    amount_paid: '',
   });
 
   const set = k => v => setForm(f => ({ ...f, [k]: v }));
@@ -49,7 +49,6 @@ export default function SalesPage() {
 
   useEffect(() => { loadAll(); }, [loadAll]);
 
-  // Close dropdown when clicking outside
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
@@ -81,7 +80,6 @@ export default function SalesPage() {
       return;
     }
 
-    // Calculate total price
     const totalPrice = selectedProduct ? selectedProduct.selling_price * quantity : 0;
 
     if (form.payment_type === 'debt') {
@@ -90,9 +88,9 @@ export default function SalesPage() {
         return;
       }
 
-      const amountPaid = parseFloat(form.amount_paid);
-      if (!amountPaid || amountPaid < 0) {
-        toast('Please enter the amount paid.', 'warning');
+      const amountPaid = parseFloat(form.amount_paid) || 0;
+      if (amountPaid < 0) {
+        toast('Amount paid cannot be negative.', 'warning');
         return;
       }
       if (amountPaid > totalPrice) {
@@ -112,7 +110,6 @@ export default function SalesPage() {
       if (form.payment_type === 'debt') {
         body.customer_name = form.customer_name.trim();
         body.customer_phone = form.customer_phone.trim();
-        // Send the amount paid - this will be used to create the debt record
         body.amount_paid = parseFloat(form.amount_paid) || 0;
       }
 
@@ -121,21 +118,21 @@ export default function SalesPage() {
       const amountPaid = form.payment_type === 'debt' ? parseFloat(form.amount_paid) || 0 : totalPrice;
       const balance = totalPrice - amountPaid;
 
-      // Show appropriate success message
       if (form.payment_type === 'debt') {
         if (balance > 0) {
           toast(
             `Debt recorded! KSh ${fmt(amountPaid)} paid, Balance: KSh ${fmt(balance)}`,
             'success'
           );
-        } else {
+        } else if (balance === 0 && amountPaid > 0) {
           toast(`Debt fully paid! KSh ${fmt(amountPaid)}`, 'success');
+        } else {
+          toast(`Debt recorded! Full amount KSh ${fmt(totalPrice)} is outstanding.`, 'success');
         }
       } else {
         toast(`Sale recorded! KSh ${fmt(totalPrice)}`, 'success');
       }
 
-      // Reset form to default state
       setForm({
         product_id: '',
         quantity_sold: '1',
@@ -145,9 +142,7 @@ export default function SalesPage() {
         amount_paid: '',
       });
 
-      // Close dropdown if open
       setIsDropdownOpen(false);
-
       loadAll();
     } catch (err) {
       toast(err.message, 'error');
@@ -159,21 +154,18 @@ export default function SalesPage() {
   const todayRevenue = Array.isArray(sales) ? sales.reduce((s, x) => s + x.total_price, 0) : 0;
   const todayProfit = Array.isArray(sales) ? sales.reduce((s, x) => s + x.profit, 0) : 0;
 
-  // Get selected product name for display
   const getSelectedProductName = () => {
     if (!form.product_id) return 'Select a product...';
     const product = products.find(p => p.id === parseInt(form.product_id));
     return product ? `${product.name} - KSh ${product.selling_price}` : 'Select a product...';
   };
 
-  // Calculate totals
   const totalPrice = selectedProduct ? selectedProduct.selling_price * parseInt(form.quantity_sold || 0) : 0;
   const amountPaid = parseFloat(form.amount_paid) || 0;
   const balance = totalPrice - amountPaid;
 
   return (
     <div className="page-wrapper">
-      {/* Header */}
       <motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -190,7 +182,6 @@ export default function SalesPage() {
         </button>
       </motion.div>
 
-      {/* KPI Cards */}
       <motion.div
         className="kpi-grid"
         initial={{ opacity: 0 }}
@@ -235,10 +226,8 @@ export default function SalesPage() {
         </motion.div>
       </motion.div>
 
-      {/* Main Grid */}
       <div className="sales-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1.5fr', gap: '1.5rem', marginTop: '1.5rem' }}>
 
-        {/* New Sale Form */}
         <motion.div
           initial={{ opacity: 0, x: -20 }}
           animate={{ opacity: 1, x: 0 }}
@@ -250,7 +239,6 @@ export default function SalesPage() {
             <FiShoppingCart size={18} /> New Sale
           </h3>
 
-          {/* Custom Dropdown */}
           <div className="form-group" ref={dropdownRef}>
             <label className="form-label" style={{ fontFamily: 'Poppins, sans-serif' }}>Product</label>
             <div
@@ -411,7 +399,6 @@ export default function SalesPage() {
               value={form.quantity_sold}
               onChange={e => {
                 set('quantity_sold')(e.target.value);
-                // Update amount paid when quantity changes for debt
                 if (form.payment_type === 'debt' && selectedProduct) {
                   const total = selectedProduct.selling_price * parseInt(e.target.value || 0);
                   set('amount_paid')(String(total));
@@ -440,7 +427,6 @@ export default function SalesPage() {
                 className={`btn ${form.payment_type === 'debt' ? 'btn-secondary' : 'btn-outline'}`}
                 onClick={() => {
                   set('payment_type')('debt');
-                  // Auto-fill amount paid with total price
                   if (selectedProduct) {
                     const total = selectedProduct.selling_price * parseInt(form.quantity_sold || 0);
                     set('amount_paid')(String(total));
@@ -490,7 +476,7 @@ export default function SalesPage() {
                   step="0.01"
                   value={form.amount_paid}
                   onChange={e => set('amount_paid')(e.target.value)}
-                  placeholder="Enter amount paid"
+                  placeholder="Enter amount paid (0 for full debt)"
                   style={{ fontFamily: 'Poppins, sans-serif' }}
                 />
                 {selectedProduct && (
@@ -508,6 +494,10 @@ export default function SalesPage() {
                     ) : balance === 0 && amountPaid > 0 ? (
                       <div style={{ color: 'var(--accent-green)' }}>
                         ✓ Fully Paid
+                      </div>
+                    ) : balance === 0 && amountPaid === 0 ? (
+                      <div style={{ color: 'var(--accent-amber)' }}>
+                        Full debt recorded
                       </div>
                     ) : amountPaid > totalPrice ? (
                       <div style={{ color: 'var(--accent-red)' }}>
@@ -560,7 +550,7 @@ export default function SalesPage() {
               loading ||
               !form.product_id ||
               (form.payment_type === 'debt' && (!form.customer_name.trim() || !form.customer_phone.trim())) ||
-              (form.payment_type === 'debt' && (!form.amount_paid || parseFloat(form.amount_paid) < 0)) ||
+              (form.payment_type === 'debt' && parseFloat(form.amount_paid) < 0) ||
               (form.payment_type === 'debt' && parseFloat(form.amount_paid) > totalPrice)
             }
             style={{ width: '100%', marginTop: '1rem', padding: '0.75rem', fontFamily: 'Poppins, sans-serif', color: '#0F172A' }}
@@ -569,7 +559,6 @@ export default function SalesPage() {
           </button>
         </motion.div>
 
-        {/* Recent Sales Table */}
         <motion.div
           initial={{ opacity: 0, x: 20 }}
           animate={{ opacity: 1, x: 0 }}
@@ -628,7 +617,6 @@ export default function SalesPage() {
         </motion.div>
       </div>
 
-      {/* Responsive CSS */}
       <style>{`
         @media (max-width: 768px) {
           .sales-grid {
