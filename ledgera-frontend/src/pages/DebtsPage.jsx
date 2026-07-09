@@ -26,7 +26,6 @@ export default function DebtsPage() {
   const [search, setSearch] = useState('');
   const [confirm, setConfirm] = useState(null);
   const [paymentAmount, setPaymentAmount] = useState('');
-  const [isPartialPayment, setIsPartialPayment] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -71,7 +70,6 @@ export default function DebtsPage() {
 
     const amountPaid = parseFloat(paymentAmount) || debt.amount;
 
-    // Validate amount
     if (amountPaid <= 0) {
       toast('Amount must be greater than 0.', 'warning');
       return;
@@ -83,17 +81,14 @@ export default function DebtsPage() {
 
     try {
       if (amountPaid === debt.amount) {
-        // Full payment - use the /pay endpoint
         await api.post(`/debts/${id}/pay`, {});
         toast('Debt fully paid ✓', 'success');
       } else {
-        // Partial payment - use the /partial-pay endpoint
         await api.post(`/debts/${id}/partial-pay`, { amount_paid: amountPaid });
         toast(`Payment of KSh ${fmt(amountPaid)} recorded. Remaining: KSh ${fmt(debt.amount - amountPaid)}`, 'success');
       }
       setConfirm(null);
       setPaymentAmount('');
-      setIsPartialPayment(false);
       load();
     } catch (err) {
       toast(err.message, 'error');
@@ -110,19 +105,16 @@ export default function DebtsPage() {
 
   const confirmDebt = safeDebts.find(d => d.id === confirm);
 
-  // Reset payment amount when modal opens
   const openPaymentModal = (debtId) => {
     const debt = safeDebts.find(d => d.id === debtId);
     if (debt) {
       setPaymentAmount(String(debt.amount));
-      setIsPartialPayment(false);
       setConfirm(debtId);
     }
   };
 
   return (
     <div className="page-wrapper">
-      {/* Header */}
       <motion.div
         initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
@@ -137,7 +129,6 @@ export default function DebtsPage() {
         </p>
       </motion.div>
 
-      {/* Summary cards */}
       {summary && (
         <motion.div
           className="kpi-grid"
@@ -188,7 +179,6 @@ export default function DebtsPage() {
         </motion.div>
       )}
 
-      {/* Controls */}
       <div style={{
         display: 'flex',
         flexDirection: 'column',
@@ -240,7 +230,6 @@ export default function DebtsPage() {
         </div>
       </div>
 
-      {/* Scrollable Table */}
       <motion.div
         className="table-wrap"
         initial={{ opacity: 0, y: 16 }}
@@ -342,13 +331,11 @@ export default function DebtsPage() {
         </div>
       </motion.div>
 
-      {/* Payment Modal */}
       <Modal
         open={!!confirm}
         onClose={() => {
           setConfirm(null);
           setPaymentAmount('');
-          setIsPartialPayment(false);
         }}
         title="Record Payment"
         maxWidth={420}
@@ -397,11 +384,7 @@ export default function DebtsPage() {
                 min="0.01"
                 step="0.01"
                 value={paymentAmount}
-                onChange={e => {
-                  const val = parseFloat(e.target.value);
-                  setPaymentAmount(e.target.value);
-                  setIsPartialPayment(val < confirmDebt.amount);
-                }}
+                onChange={e => setPaymentAmount(e.target.value)}
                 style={{ fontFamily: 'Poppins, sans-serif', fontWeight: 600 }}
               />
               <div style={{
@@ -425,6 +408,11 @@ export default function DebtsPage() {
                     ⚠️ Amount exceeds remaining balance!
                   </span>
                 )}
+                {(!paymentAmount || parseFloat(paymentAmount) === 0) && (
+                  <span style={{ color: 'var(--text-muted)' }}>
+                    Enter the amount the customer is paying
+                  </span>
+                )}
               </div>
             </div>
 
@@ -444,7 +432,6 @@ export default function DebtsPage() {
                 onClick={() => {
                   setConfirm(null);
                   setPaymentAmount('');
-                  setIsPartialPayment(false);
                 }}
                 style={{ fontFamily: 'Poppins, sans-serif' }}
               >
@@ -464,7 +451,6 @@ export default function DebtsPage() {
         )}
       </Modal>
 
-      {/* Responsive CSS */}
       <style>{`
         @media (max-width: 768px) {
           .kpi-grid {

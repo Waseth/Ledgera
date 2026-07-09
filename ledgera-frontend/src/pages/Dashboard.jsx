@@ -3,7 +3,7 @@ import { motion } from 'framer-motion';
 import {
   FiDollarSign, FiTrendingUp, FiTrendingDown, FiActivity,
   FiRefreshCw, FiPlus, FiAlertCircle, FiPackage, FiCalendar, FiClock, FiDollarSign as FiExpense,
-  FiTruck, FiWifi, FiDatabase, FiHome, FiZap, FiMoreHorizontal, FiBarChart2
+  FiTruck, FiWifi, FiDatabase, FiHome, FiZap, FiMoreHorizontal, FiBarChart2, FiUser
 } from 'react-icons/fi';
 import {
   AreaChart, Area, BarChart, Bar, LineChart, Line,
@@ -133,6 +133,12 @@ export default function Dashboard() {
   const todayExpectedCash = dailyReport?.cash_revenue || 0;
   const monthExpectedCash = monthlyReport?.total_revenue || 0;
 
+  // Debt profit breakdown values
+  const todayCashProfit = data?.today?.cash_profit || 0;
+  const todayDebtProfit = data?.today?.debt_profit || 0;
+  const todayTotalProfit = data?.today?.profit || 0;
+  const collectionRate = data?.today?.collection_rate || 0;
+
   // Handle month change for weekly breakdown
   const handleMonthChange = (e) => {
     setSelectedMonth(e.target.value);
@@ -194,6 +200,66 @@ export default function Dashboard() {
             <div style={{ fontSize: '1.8rem', fontWeight: 700, color: '#10B981' }}>KSh {fmt(monthExpectedCash)}</div>
             <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
               Total cash sales (current month)
+            </div>
+          </div>
+        </div>
+      </motion.div>
+
+      {/* Profit Breakdown Cards - NEW SECTION */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.08 }}
+        style={{ marginBottom: '1.5rem' }}
+      >
+        <h3 style={{ fontFamily: 'Poppins, sans-serif', fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+          Profit Breakdown
+        </h3>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
+          <div className="card stat-card" style={{ textAlign: 'center' }}>
+            <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '0.5rem' }}>
+              <FiTrendingUp size={14} style={{ display: 'inline', marginRight: '0.25rem' }} />
+              Total Profit
+            </div>
+            <div style={{ fontSize: '1.8rem', fontWeight: 700, color: '#10B981' }}>KSh {fmt(todayTotalProfit)}</div>
+            <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
+              From all sales (cash + debt)
+            </div>
+          </div>
+          <div className="card stat-card" style={{ textAlign: 'center' }}>
+            <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '0.5rem' }}>
+              <FiDollarSign size={14} style={{ display: 'inline', marginRight: '0.25rem' }} />
+              Cash Profit
+            </div>
+            <div style={{ fontSize: '1.8rem', fontWeight: 700, color: '#3B82F6' }}>KSh {fmt(todayCashProfit)}</div>
+            <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
+              From cash sales (collected)
+            </div>
+          </div>
+          <div className="card stat-card" style={{ textAlign: 'center' }}>
+            <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '0.5rem' }}>
+              <FiUser size={14} style={{ display: 'inline', marginRight: '0.25rem' }} />
+              Debt Profit
+            </div>
+            <div style={{ fontSize: '1.8rem', fontWeight: 700, color: '#F59E0B' }}>KSh {fmt(todayDebtProfit)}</div>
+            <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
+              From debt sales (pending)
+            </div>
+          </div>
+          <div className="card stat-card" style={{ textAlign: 'center' }}>
+            <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '0.5rem' }}>
+              <FiActivity size={14} style={{ display: 'inline', marginRight: '0.25rem' }} />
+              Collection Rate
+            </div>
+            <div style={{
+              fontSize: '1.8rem',
+              fontWeight: 700,
+              color: collectionRate > 70 ? '#10B981' : collectionRate > 30 ? '#F59E0B' : '#EF4444'
+            }}>
+              {collectionRate}%
+            </div>
+            <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
+              Cash collected vs total sales
             </div>
           </div>
         </div>
@@ -320,7 +386,15 @@ export default function Dashboard() {
                     <span style={{ fontWeight: 600, color: '#3B82F6' }}>KSh {fmt(week.total_revenue)}</span>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span style={{ color: 'var(--text-muted)' }}>Profit:</span>
+                    <span style={{ color: 'var(--text-muted)' }}>Cash Profit:</span>
+                    <span style={{ fontWeight: 600, color: '#3B82F6' }}>KSh {fmt(week.cash_profit || 0)}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ color: 'var(--text-muted)' }}>Debt Profit:</span>
+                    <span style={{ fontWeight: 600, color: '#F59E0B' }}>KSh {fmt(week.debt_profit || 0)}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ color: 'var(--text-muted)' }}>Total Profit:</span>
                     <span style={{ fontWeight: 600, color: '#10B981' }}>KSh {fmt(week.total_profit)}</span>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>

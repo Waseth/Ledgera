@@ -160,8 +160,20 @@ export default function SalesPage() {
     ? sales.filter(s => s.payment_type === 'debt').reduce((s, x) => s + x.total_price, 0)
     : 0;
 
+  // CASH PROFIT ONLY - Profit from cash sales (collected)
+  const todayCashProfit = Array.isArray(sales)
+    ? sales.filter(s => s.payment_type === 'cash').reduce((s, x) => s + x.profit, 0)
+    : 0;
+
+  // TOTAL PROFIT - Profit from ALL sales (cash + debt)
+  const todayTotalProfit = Array.isArray(sales)
+    ? sales.reduce((s, x) => s + x.profit, 0)
+    : 0;
+
+  // Debt Profit - Profit from debt sales (pending)
+  const todayDebtProfit = todayTotalProfit - todayCashProfit;
+
   const todayTotalRevenue = todayCashRevenue + todayDebtSales;
-  const todayProfit = Array.isArray(sales) ? sales.reduce((s, x) => s + x.profit, 0) : 0;
 
   const getSelectedProductName = () => {
     if (!form.product_id) return 'Select a product...';
@@ -238,10 +250,10 @@ export default function SalesPage() {
           <div className="card stat-card">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
               <div>
-                <div className="stat-label" style={{ fontFamily: 'Poppins, sans-serif' }}>Today's Profit</div>
-                <div className="stat-value" style={{ fontFamily: 'Poppins, sans-serif' }}>KSh {fmt(todayProfit)}</div>
+                <div className="stat-label" style={{ fontFamily: 'Poppins, sans-serif' }}>Today's Cash Profit</div>
+                <div className="stat-value" style={{ fontFamily: 'Poppins, sans-serif', color: 'var(--accent-green)' }}>KSh {fmt(todayCashProfit)}</div>
               </div>
-              <FiTrendingUp size={28} color="var(--accent-teal)" style={{ opacity: 0.7 }} />
+              <FiTrendingUp size={28} color="var(--accent-green)" style={{ opacity: 0.7 }} />
             </div>
           </div>
         </motion.div>
@@ -312,7 +324,7 @@ export default function SalesPage() {
                     border: '1px solid var(--border-medium)',
                     borderRadius: 'var(--radius-md)',
                     boxShadow: 'var(--shadow-lg)',
-                    maxHeight: '500px',
+                    maxHeight: '300px',
                     overflowY: 'auto',
                     zIndex: 50,
                   }}
@@ -556,9 +568,9 @@ export default function SalesPage() {
                 </div>
               )}
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ fontFamily: 'Poppins, sans-serif', color: 'var(--text-primary)' }}>Profit:</span>
+                <span style={{ fontFamily: 'Poppins, sans-serif', color: 'var(--text-primary)' }}>Cash Profit:</span>
                 <span style={{ fontFamily: 'Poppins, sans-serif', fontWeight: 700, color: 'var(--accent-green)' }}>
-                  KSh {fmt((selectedProduct.selling_price - selectedProduct.buying_price) * parseInt(form.quantity_sold))}
+                  {form.payment_type === 'cash' ? `KSh ${fmt((selectedProduct.selling_price - selectedProduct.buying_price) * parseInt(form.quantity_sold))}` : 'N/A (Debt)'}
                 </span>
               </div>
             </div>
@@ -597,13 +609,14 @@ export default function SalesPage() {
             WebkitOverflowScrolling: 'touch',
             scrollbarWidth: 'thin',
           }}>
-            <div style={{ minWidth: '500px' }}>
+            <div style={{ minWidth: '600px' }}>
               <table className="table">
                 <thead>
                   <tr>
                     <th style={{ fontFamily: 'Poppins, sans-serif' }}>Product</th>
                     <th style={{ fontFamily: 'Poppins, sans-serif' }}>Qty</th>
                     <th style={{ fontFamily: 'Poppins, sans-serif' }}>Amount</th>
+                    <th style={{ fontFamily: 'Poppins, sans-serif' }}>Profit</th>
                     <th style={{ fontFamily: 'Poppins, sans-serif' }}>Type</th>
                     <th style={{ fontFamily: 'Poppins, sans-serif' }}>Time</th>
                   </tr>
@@ -611,7 +624,7 @@ export default function SalesPage() {
                 <tbody>
                   {Array.isArray(sales) && sales.length === 0 && (
                     <tr>
-                      <td colSpan="5" style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)', fontFamily: 'Poppins, sans-serif' }}>
+                      <td colSpan="6" style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)', fontFamily: 'Poppins, sans-serif' }}>
                         No sales recorded today
                       </td>
                     </tr>
@@ -621,6 +634,9 @@ export default function SalesPage() {
                       <td style={{ fontFamily: 'Poppins, sans-serif', fontWeight: 500, whiteSpace: 'nowrap', color: 'var(--text-primary)' }}>{s.product_name}</td>
                       <td style={{ fontFamily: 'Poppins, sans-serif', color: 'var(--text-primary)' }}>{s.quantity_sold}</td>
                       <td style={{ fontFamily: 'Poppins, sans-serif', whiteSpace: 'nowrap', color: 'var(--text-primary)' }}>KSh {fmt(s.total_price)}</td>
+                      <td style={{ fontFamily: 'Poppins, sans-serif', whiteSpace: 'nowrap', color: s.payment_type === 'cash' ? 'var(--accent-green)' : 'var(--text-muted)' }}>
+                        {s.payment_type === 'cash' ? `KSh ${fmt(s.profit)}` : '—'}
+                      </td>
                       <td>
                         <span className={`badge ${s.payment_type === 'cash' ? 'badge-success' : 'badge-warning'}`} style={{ fontFamily: 'Poppins, sans-serif', whiteSpace: 'nowrap' }}>
                           {s.payment_type === 'cash' ? 'Cash' : 'Debt'}

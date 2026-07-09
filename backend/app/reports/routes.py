@@ -60,6 +60,26 @@ def _expenses_total(start: date, end: date):
     ).scalar()
 
 
+def _profit_breakdown(start: date, end: date):
+    cash_profit = db.session.query(
+        func.coalesce(func.sum(Sale.profit), 0.0)
+    ).filter(
+        Sale.payment_type == 'cash',
+        db.func.date(Sale.timestamp) >= start,
+        db.func.date(Sale.timestamp) <= end
+    ).scalar() or 0.0
+
+    debt_profit = db.session.query(
+        func.coalesce(func.sum(Sale.profit), 0.0)
+    ).filter(
+        Sale.payment_type == 'debt',
+        db.func.date(Sale.timestamp) >= start,
+        db.func.date(Sale.timestamp) <= end
+    ).scalar() or 0.0
+
+    return cash_profit, debt_profit
+
+
 def save_monthly_snapshot(year, month):
     start = date(year, month, 1)
     if month == 12:
@@ -70,6 +90,7 @@ def save_monthly_snapshot(year, month):
     agg = _sales_aggregates(start, end)
     collections = _debt_collections(start, end)
     expenses = _expenses_total(start, end)
+    cash_profit, debt_profit = _profit_breakdown(start, end)
 
     total_actual_revenue = agg.cash_revenue + collections
     net_profit = round(agg.profit - expenses, 2)
@@ -110,6 +131,7 @@ def daily_report():
     agg = _sales_aggregates(start, start)
     collections = _debt_collections(start, start)
     expenses = _expenses_total(start, start)
+    cash_profit, debt_profit = _profit_breakdown(start, start)
 
     total_actual_revenue = agg.cash_revenue + collections
     net_profit = round(agg.profit - expenses, 2)
@@ -121,6 +143,8 @@ def daily_report():
         "debt_sales": round(agg.debt_revenue, 2),
         "debt_collections": round(collections, 2),
         "profit": round(agg.profit, 2),
+        "cash_profit": round(cash_profit, 2),
+        "debt_profit": round(debt_profit, 2),
         "expenses": round(expenses, 2),
         "net_profit": net_profit,
         "sale_count": agg.count,
@@ -136,6 +160,7 @@ def weekly_report():
     agg = _sales_aggregates(start, today)
     collections = _debt_collections(start, today)
     expenses = _expenses_total(start, today)
+    cash_profit, debt_profit = _profit_breakdown(start, today)
 
     total_actual_revenue = agg.cash_revenue + collections
     net_profit = round(agg.profit - expenses, 2)
@@ -164,6 +189,8 @@ def weekly_report():
         "debt_sales": round(agg.debt_revenue, 2),
         "debt_collections": round(collections, 2),
         "total_profit": round(agg.profit, 2),
+        "cash_profit": round(cash_profit, 2),
+        "debt_profit": round(debt_profit, 2),
         "total_expenses": round(expenses, 2),
         "net_profit": net_profit,
         "sale_count": agg.count,
@@ -205,6 +232,7 @@ def monthly_report():
     agg = _sales_aggregates(start, end)
     collections = _debt_collections(start, end)
     expenses = _expenses_total(start, end)
+    cash_profit, debt_profit = _profit_breakdown(start, end)
 
     total_actual_revenue = agg.cash_revenue + collections
     net_profit = round(agg.profit - expenses, 2)
@@ -239,6 +267,8 @@ def monthly_report():
         "debt_sales": round(agg.debt_revenue, 2),
         "debt_collections": round(collections, 2),
         "total_profit": round(agg.profit, 2),
+        "cash_profit": round(cash_profit, 2),
+        "debt_profit": round(debt_profit, 2),
         "total_expenses": round(expenses, 2),
         "net_profit": net_profit,
         "sale_count": agg.count,
@@ -490,12 +520,49 @@ def dashboard_admin():
     today_exp = _expenses_total(today, today)
     week_exp = _expenses_total(week_start, today)
 
+    # Calculate cash profit and debt profit for today
+    # Using the same method as SalesPage
+    cash_profit_today = db.session.query(
+        func.coalesce(func.sum(Sale.profit), 0.0)
+    ).filter(
+        Sale.payment_type == 'cash',
+        db.func.date(Sale.timestamp) == today
+    ).scalar() or 0.0
+
+    debt_profit_today = db.session.query(
+        func.coalesce(func.sum(Sale.profit), 0.0)
+    ).filter(
+        Sale.payment_type == 'debt',
+        db.func.date(Sale.timestamp) == today
+    ).scalar() or 0.0
+
+    # Calculate cash profit and debt profit for the week
+    cash_profit_week = db.session.query(
+        func.coalesce(func.sum(Sale.profit), 0.0)
+    ).filter(
+        Sale.payment_type == 'cash',
+        db.func.date(Sale.timestamp) >= week_start,
+        db.func.date(Sale.timestamp) <= today
+    ).scalar() or 0.0
+
+    debt_profit_week = db.session.query(
+        func.coalesce(func.sum(Sale.profit), 0.0)
+    ).filter(
+        Sale.payment_type == 'debt',
+        db.func.date(Sale.timestamp) >= week_start,
+        db.func.date(Sale.timestamp) <= today
+    ).scalar() or 0.0
+
     today_total_revenue = today_agg.cash_revenue + today_collections
     week_total_revenue = week_agg.cash_revenue + week_collections
 
     debt_total = db.session.query(
         func.coalesce(func.sum(Debt.amount), 0.0)
     ).filter(Debt.is_paid == False).scalar() or 0.0
+
+    # Calculate collection rate
+    total_sales = today_agg.cash_revenue + today_agg.debt_revenue
+    collection_rate = round((today_collections / total_sales * 100), 1) if total_sales > 0 else 0
 
     from flask import current_app
     threshold = current_app.config.get("LOW_STOCK_THRESHOLD", 5)
@@ -510,9 +577,12 @@ def dashboard_admin():
             "debt_sales": round(today_agg.debt_revenue, 2),
             "debt_collections": round(today_collections, 2),
             "profit": round(today_agg.profit, 2),
+            "cash_profit": round(cash_profit_today, 2),
+            "debt_profit": round(debt_profit_today, 2),
             "expenses": round(today_exp, 2),
             "net_profit": round(today_agg.profit - today_exp, 2),
             "sale_count": today_agg.count,
+            "collection_rate": collection_rate,
         },
         "week": {
             "revenue": round(week_total_revenue, 2),
@@ -520,6 +590,8 @@ def dashboard_admin():
             "debt_sales": round(week_agg.debt_revenue, 2),
             "debt_collections": round(week_collections, 2),
             "profit": round(week_agg.profit, 2),
+            "cash_profit": round(cash_profit_week, 2),
+            "debt_profit": round(debt_profit_week, 2),
             "expenses": round(week_exp, 2),
             "net_profit": round(week_agg.profit - week_exp, 2),
             "sale_count": week_agg.count,
@@ -653,6 +725,7 @@ def weekly_by_month():
             agg = _sales_aggregates(w["start"], w["end"])
             collections = _debt_collections(w["start"], w["end"])
             expenses = _expenses_total(w["start"], w["end"])
+            cash_profit, debt_profit = _profit_breakdown(w["start"], w["end"])
             total_revenue = agg.cash_revenue + collections
             net_profit = round(agg.profit - expenses, 2)
 
@@ -666,6 +739,8 @@ def weekly_by_month():
                 "debt_sales": round(agg.debt_revenue, 2),
                 "debt_collections": round(collections, 2),
                 "total_profit": round(agg.profit, 2),
+                "cash_profit": round(cash_profit, 2),
+                "debt_profit": round(debt_profit, 2),
                 "total_expenses": round(expenses, 2),
                 "net_profit": net_profit,
                 "sale_count": agg.count
@@ -724,7 +799,9 @@ def _simple_report_html(title, endpoint):
       html += `<div class="kpi"><h4>Cash Revenue</h4><p>KSh ${{fmt(d.cash_revenue)}}</p></div>`;
       html += `<div class="kpi"><h4>Debt Sales</h4><p>KSh ${{fmt(d.debt_sales)}}</p></div>`;
       html += `<div class="kpi"><h4>Debt Collections</h4><p>KSh ${{fmt(d.debt_collections)}}</p></div>`;
-      html += `<div class="kpi"><h4>Profit</h4><p>KSh ${{fmt(d.total_profit)}}</p></div>`;
+      html += `<div class="kpi"><h4>Total Profit</h4><p>KSh ${{fmt(d.total_profit)}}</p></div>`;
+      html += `<div class="kpi"><h4>Cash Profit</h4><p>KSh ${{fmt(d.cash_profit)}}</p></div>`;
+      html += `<div class="kpi"><h4>Debt Profit</h4><p>KSh ${{fmt(d.debt_profit)}}</p></div>`;
       html += `<div class="kpi"><h4>Expenses</h4><p>KSh ${{fmt(d.total_expenses)}}</p></div>`;
       html += `<div class="kpi"><h4>Net Profit</h4><p>KSh ${{fmt(d.net_profit)}}</p></div>`;
       html += `<div class="kpi"><h4>Sales Count</h4><p>${{d.sale_count}}</p></div>`;
