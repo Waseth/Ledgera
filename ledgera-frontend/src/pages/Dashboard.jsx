@@ -181,7 +181,11 @@ export default function Dashboard() {
         <h3 style={{ fontFamily: 'Poppins, sans-serif', fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
           Expected Cash (Based on Sales)
         </h3>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '1rem' }}>
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
+          gap: '1rem'
+        }}>
           <div className="card stat-card" style={{ textAlign: 'center' }}>
             <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '0.5rem' }}>
               <FiDollarSign size={14} style={{ display: 'inline', marginRight: '0.25rem' }} />
@@ -205,7 +209,7 @@ export default function Dashboard() {
         </div>
       </motion.div>
 
-      {/* Profit Breakdown Cards - NEW SECTION */}
+      {/* Profit Breakdown Cards */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -215,7 +219,11 @@ export default function Dashboard() {
         <h3 style={{ fontFamily: 'Poppins, sans-serif', fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
           Profit Breakdown
         </h3>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(4, 1fr)',
+          gap: '1rem'
+        }}>
           <div className="card stat-card" style={{ textAlign: 'center' }}>
             <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '0.5rem' }}>
               <FiTrendingUp size={14} style={{ display: 'inline', marginRight: '0.25rem' }} />
@@ -265,7 +273,7 @@ export default function Dashboard() {
         </div>
       </motion.div>
 
-      {/* KPI Cards with auto-height - Week Revenue card removed from here */}
+      {/* KPI Cards */}
       <motion.div
         className="kpi-grid"
         initial={{ opacity: 0 }}
@@ -324,7 +332,7 @@ export default function Dashboard() {
         </motion.div>
       </motion.div>
 
-      {/* Weekly Breakdown by Month (Weeks 1-4) */}
+      {/* Weekly Breakdown by Month */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -577,6 +585,67 @@ export default function Dashboard() {
 
       <ProductModal open={prodModal} onClose={() => setProdModal(false)} onSuccess={load} />
       <ExpenseModal open={expenseModal} onClose={() => setExpenseModal(false)} onSuccess={load} />
+
+      <style>{`
+        /* Mobile: 1 column */
+        @media (max-width: 640px) {
+          .kpi-grid {
+            grid-template-columns: 1fr !important;
+          }
+        }
+
+        /* Tablet: 2 columns */
+        @media (min-width: 641px) and (max-width: 1024px) {
+          .kpi-grid {
+            grid-template-columns: repeat(2, 1fr) !important;
+          }
+        }
+
+        /* Desktop: 4 columns */
+        @media (min-width: 1025px) {
+          .kpi-grid {
+            grid-template-columns: repeat(4, 1fr) !important;
+          }
+        }
+
+        /* Profit Breakdown Cards Responsive */
+        @media (max-width: 640px) {
+          .profit-breakdown-grid {
+            grid-template-columns: 1fr !important;
+          }
+        }
+
+        @media (min-width: 641px) and (max-width: 1024px) {
+          .profit-breakdown-grid {
+            grid-template-columns: repeat(2, 1fr) !important;
+          }
+        }
+
+        @media (min-width: 1025px) {
+          .profit-breakdown-grid {
+            grid-template-columns: repeat(4, 1fr) !important;
+          }
+        }
+
+        /* Expected Cash Cards Responsive */
+        @media (max-width: 640px) {
+          .expected-cash-grid {
+            grid-template-columns: 1fr !important;
+          }
+        }
+
+        @media (min-width: 641px) and (max-width: 1024px) {
+          .expected-cash-grid {
+            grid-template-columns: repeat(2, 1fr) !important;
+          }
+        }
+
+        @media (min-width: 1025px) {
+          .expected-cash-grid {
+            grid-template-columns: repeat(2, 1fr) !important;
+          }
+        }
+      `}</style>
     </div>
   );
 }
