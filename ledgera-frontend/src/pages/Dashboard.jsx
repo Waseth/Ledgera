@@ -42,7 +42,6 @@ const CustomTooltip = ({ active, payload, label }) => {
   return null;
 };
 
-// Helper function to get expense icon based on category
 const getExpenseIcon = (category, size = 16, color = '#EF4444') => {
   const iconProps = { size, color, style: { flexShrink: 0 } };
   switch (category) {
@@ -133,13 +132,11 @@ export default function Dashboard() {
   const todayExpectedCash = dailyReport?.cash_revenue || 0;
   const monthExpectedCash = monthlyReport?.total_revenue || 0;
 
-  // Debt profit breakdown values
   const todayCashProfit = data?.today?.cash_profit || 0;
   const todayDebtProfit = data?.today?.debt_profit || 0;
   const todayTotalProfit = data?.today?.profit || 0;
   const collectionRate = data?.today?.collection_rate || 0;
 
-  // Handle month change for weekly breakdown
   const handleMonthChange = (e) => {
     setSelectedMonth(e.target.value);
   };
@@ -209,7 +206,7 @@ export default function Dashboard() {
         </div>
       </motion.div>
 
-      {/* Profit Breakdown Cards */}
+      {/* Profit Breakdown Cards - 2 per line on tablet */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -219,9 +216,8 @@ export default function Dashboard() {
         <h3 style={{ fontFamily: 'Poppins, sans-serif', fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
           Profit Breakdown
         </h3>
-        <div style={{
+        <div className="profit-breakdown-grid" style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(4, 1fr)',
           gap: '1rem'
         }}>
           <div className="card stat-card" style={{ textAlign: 'center' }}>
@@ -592,11 +588,17 @@ export default function Dashboard() {
           .kpi-grid {
             grid-template-columns: 1fr !important;
           }
+          .profit-breakdown-grid {
+            grid-template-columns: 1fr !important;
+          }
         }
 
         /* Tablet: 2 columns */
         @media (min-width: 641px) and (max-width: 1024px) {
           .kpi-grid {
+            grid-template-columns: repeat(2, 1fr) !important;
+          }
+          .profit-breakdown-grid {
             grid-template-columns: repeat(2, 1fr) !important;
           }
         }
@@ -606,43 +608,8 @@ export default function Dashboard() {
           .kpi-grid {
             grid-template-columns: repeat(4, 1fr) !important;
           }
-        }
-
-        /* Profit Breakdown Cards Responsive */
-        @media (max-width: 640px) {
-          .profit-breakdown-grid {
-            grid-template-columns: 1fr !important;
-          }
-        }
-
-        @media (min-width: 641px) and (max-width: 1024px) {
-          .profit-breakdown-grid {
-            grid-template-columns: repeat(2, 1fr) !important;
-          }
-        }
-
-        @media (min-width: 1025px) {
           .profit-breakdown-grid {
             grid-template-columns: repeat(4, 1fr) !important;
-          }
-        }
-
-        /* Expected Cash Cards Responsive */
-        @media (max-width: 640px) {
-          .expected-cash-grid {
-            grid-template-columns: 1fr !important;
-          }
-        }
-
-        @media (min-width: 641px) and (max-width: 1024px) {
-          .expected-cash-grid {
-            grid-template-columns: repeat(2, 1fr) !important;
-          }
-        }
-
-        @media (min-width: 1025px) {
-          .expected-cash-grid {
-            grid-template-columns: repeat(2, 1fr) !important;
           }
         }
       `}</style>

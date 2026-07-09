@@ -1,7 +1,8 @@
+from datetime import datetime  # ADD THIS IMPORT
 from flask import request, jsonify, current_app
 from app.sales import sales_bp
 from app.extensions import db
-from app.models import Product, Sale, Debt, AuditLog, Notification, User
+from app.models import Product, Sale, Debt, AuditLog, Notification, User, DebtCollection
 from app import cache as app_cache
 from app.auth.routes import token_required
 
@@ -112,9 +113,9 @@ def log_sale():
                 amount_paid=amount_paid,
             )
             db.session.add(debt)
+            db.session.flush()  # Flush to get debt.id
 
             if amount_paid > 0:
-                from app.models import DebtCollection
                 collection = DebtCollection(
                     debt_id=debt.id,
                     user_id=user_id,
@@ -144,10 +145,10 @@ def log_sale():
 
         db.session.commit()
 
-    except Exception:
+    except Exception as e:
         db.session.rollback()
-        current_app.logger.exception("Sale transaction failed")
-        return jsonify({"error": "Sale could not be recorded. Please retry."}), 500
+        current_app.logger.exception(f"Sale transaction failed: {str(e)}")
+        return jsonify({"error": f"Sale could not be recorded. Please retry."}), 500
 
     app_cache.invalidate_products()
     app_cache.invalidate_low_stock()
