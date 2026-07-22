@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { motion } from 'framer-motion';
 import {
   FiShoppingCart, FiPackage, FiUser, FiPhone, FiDollarSign,
-  FiRefreshCw, FiTrendingUp, FiChevronDown, FiUndo, FiX, FiAlertTriangle
+  FiRefreshCw, FiTrendingUp, FiChevronDown, FiCornerUpLeft, FiAlertTriangle
 } from 'react-icons/fi';
 import { api } from '../api/client';
 import { useToast } from '../context/ToastContext';
@@ -12,6 +12,34 @@ import Modal from '../components/Modal';
 const fmt = n => Number(n || 0).toLocaleString('en-KE', {
   minimumFractionDigits: 2, maximumFractionDigits: 2,
 });
+
+// Helper function to format time in Kenya timezone (UTC+3)
+const formatLocalTime = (timestamp) => {
+  if (!timestamp) return '';
+  const date = new Date(timestamp);
+  // Add 3 hours for Kenya time (UTC+3)
+  date.setHours(date.getHours() + 3);
+  return date.toLocaleTimeString('en-KE', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false
+  });
+};
+
+// Helper function to format full date in Kenya timezone
+const formatLocalDate = (timestamp) => {
+  if (!timestamp) return '';
+  const date = new Date(timestamp);
+  date.setHours(date.getHours() + 3);
+  return date.toLocaleDateString('en-KE', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false
+  });
+};
 
 export default function SalesPage() {
   const { toast } = useToast();
@@ -323,7 +351,7 @@ export default function SalesPage() {
             <FiShoppingCart size={18} /> New Sale
           </h3>
 
-          {/* Dropdown - same as before */}
+          {/* Dropdown */}
           <div className="form-group" ref={dropdownRef}>
             <label className="form-label" style={{ fontFamily: 'Poppins, sans-serif' }}>Product</label>
             <div
@@ -671,7 +699,7 @@ export default function SalesPage() {
                     <th style={{ fontFamily: 'Poppins, sans-serif' }}>Amount</th>
                     <th style={{ fontFamily: 'Poppins, sans-serif' }}>Profit</th>
                     <th style={{ fontFamily: 'Poppins, sans-serif' }}>Type</th>
-                    <th style={{ fontFamily: 'Poppins, sans-serif' }}>Time</th>
+                    <th style={{ fontFamily: 'Poppins, sans-serif' }}>Time (EAT)</th>
                     <th style={{ fontFamily: 'Poppins, sans-serif' }}>Action</th>
                   </tr>
                 </thead>
@@ -701,7 +729,7 @@ export default function SalesPage() {
                           </span>
                         </td>
                         <td style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontFamily: 'Poppins, sans-serif', whiteSpace: 'nowrap' }}>
-                          {new Date(s.timestamp).toLocaleTimeString()}
+                          {formatLocalTime(s.timestamp)}
                         </td>
                         <td style={{ whiteSpace: 'nowrap' }}>
                           {canUndo && (
@@ -725,7 +753,7 @@ export default function SalesPage() {
                               }}
                               title={`Undo sale (${undoRemaining}s remaining)`}
                             >
-                              <FiUndo size={12} /> {undoing === s.id ? 'Undoing...' : `Undo (${undoRemaining}s)`}
+                              <FiCornerUpLeft size={12} /> {undoing === s.id ? 'Undoing...' : `Undo (${undoRemaining}s)`}
                             </button>
                           )}
                           {s.is_reversed && (
@@ -874,7 +902,7 @@ export default function SalesPage() {
                   'Processing...'
                 ) : (
                   <>
-                    <FiUndo size={14} /> Yes, Undo Sale
+                    <FiCornerUpLeft size={14} /> Yes, Undo Sale
                   </>
                 )}
               </button>
