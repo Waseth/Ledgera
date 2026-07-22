@@ -15,7 +15,8 @@ class User(UserMixin, db.Model):
     is_active = db.Column(db.Boolean, default=True, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
-    sales = db.relationship("Sale", backref="seller", lazy="dynamic")
+    # Specify the foreign key for this relationship
+    sales = db.relationship("Sale", backref="seller", lazy="dynamic", foreign_keys="Sale.user_id")
     audit_logs = db.relationship("AuditLog", backref="actor", lazy="dynamic")
     debt_collections = db.relationship("DebtCollection", backref="collector", lazy="dynamic")
 
@@ -70,6 +71,7 @@ class Sale(db.Model):
         Index("idx_sales_reversed", "is_reversed"),
     )
 
+    # Explicitly specify foreign keys
     reversed_by_user = db.relationship("User", foreign_keys=[reversed_by])
 
     def __repr__(self):
