@@ -2,11 +2,12 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { motion } from 'framer-motion';
 import {
   FiShoppingCart, FiPackage, FiUser, FiPhone, FiDollarSign,
-  FiRefreshCw, FiTrendingUp, FiChevronDown, FiRefreshCw as FiUndo
+  FiRefreshCw, FiTrendingUp, FiChevronDown, FiUndo, FiX, FiAlertTriangle
 } from 'react-icons/fi';
 import { api } from '../api/client';
 import { useToast } from '../context/ToastContext';
 import { useAuth } from '../context/AuthContext';
+import Modal from '../components/Modal';
 
 const fmt = n => Number(n || 0).toLocaleString('en-KE', {
   minimumFractionDigits: 2, maximumFractionDigits: 2,
@@ -23,6 +24,14 @@ export default function SalesPage() {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const dropdownRef = useRef(null);
   const [undoing, setUndoing] = useState(null);
+
+  // Undo confirmation modal state
+  const [undoModal, setUndoModal] = useState({
+    isOpen: false,
+    saleId: null,
+    saleData: null,
+    reason: '',
+  });
 
   const [form, setForm] = useState({
     product_id: '',
@@ -152,16 +161,39 @@ export default function SalesPage() {
     }
   };
 
-  const handleUndoSale = async (saleId) => {
-    if (!window.confirm('Are you sure you want to undo this sale? This will restore stock and remove any debt records.')) {
-      return;
+  // Open the custom undo confirmation modal
+  const openUndoModal = (saleId) => {
+    const sale = sales.find(s => s.id === saleId);
+    if (sale) {
+      setUndoModal({
+        isOpen: true,
+        saleId: saleId,
+        saleData: sale,
+        reason: '',
+      });
     }
+  };
+
+  // Close the undo modal
+  const closeUndoModal = () => {
+    setUndoModal({
+      isOpen: false,
+      saleId: null,
+      saleData: null,
+      reason: '',
+    });
+  };
+
+  // Handle the undo confirmation
+  const confirmUndo = async () => {
+    const { saleId, reason } = undoModal;
+    if (!saleId) return;
 
     setUndoing(saleId);
     try {
-      const reason = window.prompt('Reason for reversal (optional):');
-      await api.post(`/sales/${saleId}/reverse`, { reason: reason || '' });
+      await api.post(`/sales/${saleId}/reverse`, { reason: reason.trim() || 'No reason provided' });
       toast('Sale reversed successfully! Stock restored.', 'success');
+      closeUndoModal();
       loadAll();
     } catch (err) {
       toast(err.message, 'error');
@@ -170,6 +202,7 @@ export default function SalesPage() {
     }
   };
 
+  // Separate revenue tracking
   const todayCashRevenue = Array.isArray(sales)
     ? sales.filter(s => s.payment_type === 'cash').reduce((s, x) => s + x.total_price, 0)
     : 0;
@@ -182,14 +215,11 @@ export default function SalesPage() {
     ? sales.filter(s => s.payment_type === 'cash').reduce((s, x) => s + x.profit, 0)
     : 0;
 
-  // TOTAL PROFIT - Profit from ALL sales (cash + debt)
   const todayTotalProfit = Array.isArray(sales)
     ? sales.reduce((s, x) => s + x.profit, 0)
     : 0;
 
-  // Debt Profit - Profit from debt sales (pending)
   const todayDebtProfit = todayTotalProfit - todayCashProfit;
-
   const todayTotalRevenue = todayCashRevenue + todayDebtSales;
 
   const getSelectedProductName = () => {
@@ -204,6 +234,7 @@ export default function SalesPage() {
 
   return (
     <div className="page-wrapper">
+      {/* Header */}
       <motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -220,6 +251,7 @@ export default function SalesPage() {
         </button>
       </motion.div>
 
+      {/* KPI Cards */}
       <motion.div
         className="kpi-grid"
         initial={{ opacity: 0 }}
@@ -276,8 +308,10 @@ export default function SalesPage() {
         </motion.div>
       </motion.div>
 
+      {/* Main Grid */}
       <div className="sales-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1.5fr', gap: '1.5rem', marginTop: '1.5rem' }}>
 
+        {/* New Sale Form */}
         <motion.div
           initial={{ opacity: 0, x: -20 }}
           animate={{ opacity: 1, x: 0 }}
@@ -289,6 +323,7 @@ export default function SalesPage() {
             <FiShoppingCart size={18} /> New Sale
           </h3>
 
+          {/* Dropdown - same as before */}
           <div className="form-group" ref={dropdownRef}>
             <label className="form-label" style={{ fontFamily: 'Poppins, sans-serif' }}>Product</label>
             <div
@@ -551,7 +586,7 @@ export default function SalesPage() {
                       </div>
                     ) : amountPaid > totalPrice ? (
                       <div style={{ color: 'var(--accent-red)' }}>
-                        Amount exceeds total!
+                        ⚠️ Amount exceeds total!
                       </div>
                     ) : null}
                   </div>
@@ -609,6 +644,7 @@ export default function SalesPage() {
           </button>
         </motion.div>
 
+        {/* Recent Sales Table */}
         <motion.div
           initial={{ opacity: 0, x: 20 }}
           animate={{ opacity: 1, x: 0 }}
@@ -671,7 +707,7 @@ export default function SalesPage() {
                           {canUndo && (
                             <button
                               className="btn btn-warning btn-sm"
-                              onClick={() => handleUndoSale(s.id)}
+                              onClick={() => openUndoModal(s.id)}
                               disabled={undoing === s.id}
                               style={{
                                 fontFamily: 'Poppins, sans-serif',
@@ -712,6 +748,140 @@ export default function SalesPage() {
           </div>
         </motion.div>
       </div>
+
+      {/* Custom Undo Confirmation Modal */}
+      <Modal
+        open={undoModal.isOpen}
+        onClose={closeUndoModal}
+        title="Confirm Undo Sale"
+        maxWidth={420}
+      >
+        {undoModal.saleData && (
+          <div>
+            {/* Warning Icon */}
+            <div style={{
+              display: 'flex',
+              justifyContent: 'center',
+              marginBottom: '1rem'
+            }}>
+              <div style={{
+                width: 56,
+                height: 56,
+                borderRadius: '50%',
+                background: 'rgba(245, 158, 11, 0.15)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}>
+                <FiAlertTriangle size={28} color="#F59E0B" />
+              </div>
+            </div>
+
+            <p style={{
+              fontFamily: 'Poppins, sans-serif',
+              fontSize: '0.9rem',
+              color: 'var(--text-primary)',
+              textAlign: 'center',
+              marginBottom: '1.25rem'
+            }}>
+              Are you sure you want to undo this sale?
+              <br />
+              <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                This will restore stock and remove any debt records.
+              </span>
+            </p>
+
+            {/* Sale Details */}
+            <div style={{
+              background: 'var(--bg-surface)',
+              borderRadius: 8,
+              padding: '1rem',
+              marginBottom: '1.25rem',
+              border: '1px solid var(--border-medium)',
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+                <span style={{ fontFamily: 'Poppins, sans-serif', fontSize: '0.75rem', color: 'var(--text-muted)' }}>Product</span>
+                <span style={{ fontFamily: 'Poppins, sans-serif', fontSize: '0.85rem', fontWeight: 600 }}>{undoModal.saleData.product_name}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+                <span style={{ fontFamily: 'Poppins, sans-serif', fontSize: '0.75rem', color: 'var(--text-muted)' }}>Quantity</span>
+                <span style={{ fontFamily: 'Poppins, sans-serif', fontSize: '0.85rem', fontWeight: 600 }}>{undoModal.saleData.quantity_sold}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+                <span style={{ fontFamily: 'Poppins, sans-serif', fontSize: '0.75rem', color: 'var(--text-muted)' }}>Amount</span>
+                <span style={{ fontFamily: 'Poppins, sans-serif', fontSize: '0.85rem', fontWeight: 600 }}>KSh {fmt(undoModal.saleData.total_price)}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ fontFamily: 'Poppins, sans-serif', fontSize: '0.75rem', color: 'var(--text-muted)' }}>Payment Type</span>
+                <span className={`badge ${undoModal.saleData.payment_type === 'cash' ? 'badge-success' : 'badge-warning'}`} style={{ fontSize: '0.7rem' }}>
+                  {undoModal.saleData.payment_type === 'cash' ? 'Cash' : 'Debt'}
+                </span>
+              </div>
+            </div>
+
+            {/* Reason Input */}
+            <div className="form-group">
+              <label className="form-label" style={{ fontFamily: 'Poppins, sans-serif' }}>
+                Reason for Reversal (Optional)
+              </label>
+              <input
+                className="form-input"
+                type="text"
+                value={undoModal.reason}
+                onChange={e => setUndoModal(prev => ({ ...prev, reason: e.target.value }))}
+                placeholder="e.g., Wrong product, Customer changed mind..."
+                style={{ fontFamily: 'Poppins, sans-serif' }}
+              />
+            </div>
+
+            {/* Warning Text */}
+            <div style={{
+              fontSize: '0.75rem',
+              color: 'var(--accent-amber)',
+              fontFamily: 'Poppins, sans-serif',
+              marginBottom: '1.25rem',
+              padding: '0.5rem',
+              background: 'rgba(245, 158, 11, 0.08)',
+              borderRadius: '4px',
+              textAlign: 'center'
+            }}>
+              ⚠️ This action cannot be undone. The sale will be permanently reversed.
+            </div>
+
+            {/* Buttons */}
+            <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
+              <button
+                className="btn btn-outline"
+                onClick={closeUndoModal}
+                style={{ fontFamily: 'Poppins, sans-serif' }}
+              >
+                Cancel
+              </button>
+              <button
+                className="btn btn-danger"
+                onClick={confirmUndo}
+                disabled={undoing === undoModal.saleId}
+                style={{
+                  fontFamily: 'Poppins, sans-serif',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.5rem',
+                  opacity: undoing === undoModal.saleId ? 0.6 : 1,
+                  cursor: undoing === undoModal.saleId ? 'not-allowed' : 'pointer',
+                }}
+              >
+                {undoing === undoModal.saleId ? (
+                  'Processing...'
+                ) : (
+                  <>
+                    <FiUndo size={14} /> Yes, Undo Sale
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        )}
+      </Modal>
 
       <style>{`
         @media (max-width: 768px) {
