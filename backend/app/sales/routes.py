@@ -1,4 +1,4 @@
-from datetime import datetime  # ADD THIS IMPORT
+from datetime import datetime, timedelta
 from flask import request, jsonify, current_app
 from app.sales import sales_bp
 from app.extensions import db
@@ -97,6 +97,7 @@ def log_sale():
             total_price=total_price,
             profit=profit,
             payment_type=payment_type,
+            is_reversed=False,  
         )
         db.session.add(sale)
         db.session.flush()
@@ -113,7 +114,7 @@ def log_sale():
                 amount_paid=amount_paid,
             )
             db.session.add(debt)
-            db.session.flush()  # Flush to get debt.id
+            db.session.flush()
 
             if amount_paid > 0:
                 collection = DebtCollection(
@@ -135,7 +136,7 @@ def log_sale():
         if new_qty <= threshold:
             admin_users = User.query.filter_by(role='admin').all()
             product_name = product_row.name
-            message = f"⚠️ Low stock: {product_name} has only {new_qty} units left!"
+            message = f" Low stock: {product_name} has only {new_qty} units left!"
             for admin in admin_users:
                 db.session.add(Notification(
                     user_id=admin.id,
@@ -160,6 +161,8 @@ def log_sale():
         "profit": profit,
         "stock_remaining": new_qty,
         "payment_type": payment_type,
+        "can_undo": True,
+        "undo_window_seconds": 120,
     }
 
     if payment_type == "debt":
@@ -171,6 +174,75 @@ def log_sale():
             response_data["message"] = "Debt fully paid."
 
     return jsonify(response_data), 201
+
+
+@sales_bp.route("/<int:sale_id>/reverse", methods=["POST"])
+@token_required
+def reverse_sale(sale_id):
+    """
+    Reverse a sale within 2 minutes of creation.
+    Body: { "reason": "optional reason for reversal" }
+    """
+    user_role = request.user_payload.get('role') if hasattr(request, 'user_payload') else None
+    user_id = request.user_payload.get('user_id') if hasattr(request, 'user_payload') else None
+
+    if user_role != 'shopkeeper':
+        return jsonify({"error": "Only shopkeepers can reverse sales"}), 403
+
+    data = request.get_json(silent=True) or {}
+    reason = data.get("reason", "").strip()
+
+    # Get the sale
+    sale = Sale.query.filter_by(id=sale_id, is_reversed=False).first()
+    if not sale:
+        return jsonify({"error": "Sale not found or already reversed."}), 404
+
+    time_diff = datetime.utcnow() - sale.timestamp
+    if time_diff.total_seconds() > 120:
+        return jsonify({
+            "error": f"Cannot reverse sale after 2 minutes. {int(time_diff.total_seconds())} seconds elapsed."
+        }), 400
+
+    try:
+        product = Product.query.get(sale.product_id)
+        if product:
+            product.quantity += sale.quantity_sold
+            db.session.add(product)
+
+        if sale.payment_type == 'debt':
+            debt = Debt.query.filter_by(sale_id=sale.id).first()
+            if debt:
+                # Delete associated collections
+                DebtCollection.query.filter_by(debt_id=debt.id).delete()
+                db.session.delete(debt)
+
+        sale.is_reversed = True
+        sale.reversed_at = datetime.utcnow()
+        sale.reversed_by = user_id
+        sale.reversal_reason = reason or "No reason provided"
+
+        db.session.add(AuditLog(
+            user_id=user_id,
+            action="reverse_sale",
+            details=f"sale_id={sale.id} product_id={sale.product_id} qty={sale.quantity_sold} reason={reason}",
+        ))
+
+        db.session.commit()
+
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.exception(f"Sale reversal failed: {str(e)}")
+        return jsonify({"error": "Sale could not be reversed. Please try again."}), 500
+
+    app_cache.invalidate_products()
+    app_cache.invalidate_low_stock()
+
+    return jsonify({
+        "message": "Sale reversed successfully.",
+        "sale_id": sale.id,
+        "product_restored": product.quantity if product else 0,
+        "reversed_at": sale.reversed_at.isoformat(),
+    }), 200
 
 
 @sales_bp.route("/today", methods=["GET"])
@@ -188,10 +260,14 @@ def today_sales():
             Sale.profit,
             Sale.payment_type,
             Sale.timestamp,
+            Sale.is_reversed,
             Prod.name.label("product_name"),
         )
         .join(Prod, Sale.product_id == Prod.id)
-        .filter(db.func.date(Sale.timestamp) == date.today())
+        .filter(
+            db.func.date(Sale.timestamp) == date.today(),
+            Sale.is_reversed == False
+        )
         .order_by(Sale.timestamp.desc())
         .limit(500)
         .all()
@@ -207,129 +283,9 @@ def today_sales():
             "profit": r.profit,
             "payment_type": r.payment_type,
             "timestamp": r.timestamp.isoformat(),
+            "is_reversed": r.is_reversed,
+            "can_undo": (datetime.utcnow() - r.timestamp).total_seconds() <= 120 and not r.is_reversed,
+            "undo_remaining": max(0, 120 - int((datetime.utcnow() - r.timestamp).total_seconds())),
         }
         for r in rows
     ]), 200
-
-
-def _sales_html():
-    return """<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Record Sale</title>
-  <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: system-ui, sans-serif; background: #f0f2f5; padding: 1.5rem; }
-    h2 { margin-bottom: 1.25rem; color: #1e3a5f; }
-    .card { background: #fff; padding: 1.5rem; border-radius: 10px;
-            box-shadow: 0 2px 12px rgba(0,0,0,.08); max-width: 520px; margin: auto; }
-    label { display: block; font-size: .85rem; margin: .6rem 0 .2rem; color: #555; }
-    select, input { width: 100%; padding: .55rem .8rem; border: 1px solid #ddd;
-                    border-radius: 6px; font-size: .95rem; }
-    button { margin-top: 1rem; width: 100%; padding: .7rem;
-             background: #16a34a; color: #fff; border: none;
-             border-radius: 6px; font-size: 1rem; cursor: pointer; }
-    button:hover { background: #15803d; }
-    #msg { margin-top: .75rem; font-size: .9rem; text-align: center; }
-    .ok { color: #16a34a; } .err { color: #dc2626; }
-    #debt-fields { display: none; }
-    table { width: 100%; border-collapse: collapse; margin-top: 1rem; font-size: .85rem; }
-    th, td { padding: .4rem .6rem; border-bottom: 1px solid #e5e7eb; text-align: left; }
-    th { background: #f8fafc; }
-  </style>
-</head>
-<body>
-  <div class="card">
-    <h2>🛒 Record Sale</h2>
-    <label>Product</label>
-    <select id="product"></select>
-    <label>Qty to sell</label>
-    <input type="number" id="qty" value="1" min="1">
-    <label>Payment</label>
-    <select id="payment" onchange="toggleDebt()">
-      <option value="cash">Cash</option>
-      <option value="debt">Debt</option>
-    </select>
-    <div id="debt-fields">
-      <label>Customer Name</label>
-      <input type="text" id="cname">
-      <label>Customer Phone</label>
-      <input type="text" id="cphone">
-      <label>Amount Paid (KSh)</label>
-      <input type="number" id="amount_paid" value="0" min="0" step="0.01">
-    </div>
-    <button onclick="recordSale()">Record Sale</button>
-    <p id="msg"></p>
-  </div>
-  <div class="card" style="margin-top:1.5rem; max-width:700px">
-    <h2>Today's Sales</h2>
-    <table id="sales-table">
-      <thead><tr><th>Product</th><th>Qty</th><th>Total</th><th>Profit</th><th>Type</th><th>Time</th></tr></thead>
-      <tbody></tbody>
-    </table>
-  </div>
-  <script>
-    function toggleDebt() {
-      const show = document.getElementById('payment').value === 'debt';
-      document.getElementById('debt-fields').style.display = show ? 'block' : 'none';
-    }
-    async function loadProducts() {
-      const res = await fetch('/products');
-      const products = await res.json();
-      const sel = document.getElementById('product');
-      sel.innerHTML = products.map(p =>
-        `<option value="${p.id}">${p.name} (qty: ${p.quantity}) @ KSh${p.selling_price}</option>`
-      ).join('');
-    }
-    async function loadTodaySales() {
-      const res = await fetch('/sales/today');
-      const sales = await res.json();
-      const tbody = document.querySelector('#sales-table tbody');
-      tbody.innerHTML = sales.map(s =>
-        `<tr><td>${s.product_name}</td><td>${s.quantity_sold}</td>
-          <td>KSh${s.total_price}</td><td>KSh${s.profit}</td>
-          <td>${s.payment_type}</td><td>${s.timestamp.substring(11,16)}</td></tr>`
-      ).join('') || '<tr><td colspan="6" style="color:#888">No sales yet today.</td></tr>';
-    }
-    let lastSubmit = 0;
-    async function recordSale() {
-      const now = Date.now();
-      if (now - lastSubmit < 1500) return;
-      lastSubmit = now;
-      const msg = document.getElementById('msg');
-      msg.textContent = '';
-      const body = {
-        product_id: parseInt(document.getElementById('product').value),
-        quantity_sold: parseInt(document.getElementById('qty').value),
-        payment_type: document.getElementById('payment').value,
-        customer_name: document.getElementById('cname').value,
-        customer_phone: document.getElementById('cphone').value,
-        amount_paid: parseFloat(document.getElementById('amount_paid').value) || 0,
-      };
-      const res = await fetch('/sales', {
-        method: 'POST',
-        headers: {'Content-Type':'application/json'},
-        body: JSON.stringify(body),
-      });
-      const data = await res.json();
-      if (res.ok) {
-        msg.className = 'ok';
-        let msgText = `✓ ${data.message}`;
-        if (data.remaining_balance !== undefined) {
-          msgText += ` | Balance: KSh${data.remaining_balance}`;
-        }
-        msg.textContent = msgText;
-        loadProducts();
-        loadTodaySales();
-      } else {
-        msg.className = 'err';
-        msg.textContent = data.error || (data.errors || []).join(' ');
-      }
-    }
-    loadProducts();
-    loadTodaySales();
-  </script>
-</body>
-</html>""", 200

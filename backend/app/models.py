@@ -57,12 +57,20 @@ class Sale(db.Model):
     payment_type = db.Column(db.String(10), nullable=False, default="cash")
     timestamp = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
+    is_reversed = db.Column(db.Boolean, default=False, nullable=False)
+    reversed_at = db.Column(db.DateTime, nullable=True)
+    reversed_by = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
+    reversal_reason = db.Column(db.String(200), nullable=True)
+
     __table_args__ = (
         Index("idx_sales_product", "product_id"),
         Index("idx_sales_user", "user_id"),
         Index("idx_sales_timestamp", "timestamp"),
         Index("idx_sales_payment", "payment_type"),
+        Index("idx_sales_reversed", "is_reversed"),
     )
+
+    reversed_by_user = db.relationship("User", foreign_keys=[reversed_by])
 
     def __repr__(self):
         return f"<Sale id={self.id} product_id={self.product_id}>"
