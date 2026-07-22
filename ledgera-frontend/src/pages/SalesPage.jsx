@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { motion } from 'framer-motion';
 import {
   FiShoppingCart, FiPackage, FiUser, FiPhone, FiDollarSign,
-  FiRefreshCw, FiTrendingUp, FiChevronDown
+  FiRefreshCw, FiTrendingUp, FiChevronDown, FiRefreshCw as FiUndo
 } from 'react-icons/fi';
 import { api } from '../api/client';
 import { useToast } from '../context/ToastContext';
@@ -22,6 +22,7 @@ export default function SalesPage() {
   const [loading, setLoading] = useState(false);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const dropdownRef = useRef(null);
+  const [undoing, setUndoing] = useState(null);
 
   const [form, setForm] = useState({
     product_id: '',
@@ -151,7 +152,24 @@ export default function SalesPage() {
     }
   };
 
-  // Separate revenue tracking
+  const handleUndoSale = async (saleId) => {
+    if (!window.confirm('Are you sure you want to undo this sale? This will restore stock and remove any debt records.')) {
+      return;
+    }
+
+    setUndoing(saleId);
+    try {
+      const reason = window.prompt('Reason for reversal (optional):');
+      await api.post(`/sales/${saleId}/reverse`, { reason: reason || '' });
+      toast('Sale reversed successfully! Stock restored.', 'success');
+      loadAll();
+    } catch (err) {
+      toast(err.message, 'error');
+    } finally {
+      setUndoing(null);
+    }
+  };
+
   const todayCashRevenue = Array.isArray(sales)
     ? sales.filter(s => s.payment_type === 'cash').reduce((s, x) => s + x.total_price, 0)
     : 0;
@@ -160,7 +178,6 @@ export default function SalesPage() {
     ? sales.filter(s => s.payment_type === 'debt').reduce((s, x) => s + x.total_price, 0)
     : 0;
 
-  // CASH PROFIT ONLY - Profit from cash sales (collected)
   const todayCashProfit = Array.isArray(sales)
     ? sales.filter(s => s.payment_type === 'cash').reduce((s, x) => s + x.profit, 0)
     : 0;
@@ -534,7 +551,7 @@ export default function SalesPage() {
                       </div>
                     ) : amountPaid > totalPrice ? (
                       <div style={{ color: 'var(--accent-red)' }}>
-                        ⚠️ Amount exceeds total!
+                        Amount exceeds total!
                       </div>
                     ) : null}
                   </div>
@@ -609,7 +626,7 @@ export default function SalesPage() {
             WebkitOverflowScrolling: 'touch',
             scrollbarWidth: 'thin',
           }}>
-            <div style={{ minWidth: '600px' }}>
+            <div style={{ minWidth: '750px' }}>
               <table className="table">
                 <thead>
                   <tr>
@@ -619,34 +636,76 @@ export default function SalesPage() {
                     <th style={{ fontFamily: 'Poppins, sans-serif' }}>Profit</th>
                     <th style={{ fontFamily: 'Poppins, sans-serif' }}>Type</th>
                     <th style={{ fontFamily: 'Poppins, sans-serif' }}>Time</th>
+                    <th style={{ fontFamily: 'Poppins, sans-serif' }}>Action</th>
                   </tr>
                 </thead>
                 <tbody>
                   {Array.isArray(sales) && sales.length === 0 && (
                     <tr>
-                      <td colSpan="6" style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)', fontFamily: 'Poppins, sans-serif' }}>
+                      <td colSpan="7" style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)', fontFamily: 'Poppins, sans-serif' }}>
                         No sales recorded today
                       </td>
                     </tr>
                   )}
-                  {Array.isArray(sales) && sales.map(s => (
-                    <tr key={s.id}>
-                      <td style={{ fontFamily: 'Poppins, sans-serif', fontWeight: 500, whiteSpace: 'nowrap', color: 'var(--text-primary)' }}>{s.product_name}</td>
-                      <td style={{ fontFamily: 'Poppins, sans-serif', color: 'var(--text-primary)' }}>{s.quantity_sold}</td>
-                      <td style={{ fontFamily: 'Poppins, sans-serif', whiteSpace: 'nowrap', color: 'var(--text-primary)' }}>KSh {fmt(s.total_price)}</td>
-                      <td style={{ fontFamily: 'Poppins, sans-serif', whiteSpace: 'nowrap', color: s.payment_type === 'cash' ? 'var(--accent-green)' : 'var(--text-muted)' }}>
-                        {s.payment_type === 'cash' ? `KSh ${fmt(s.profit)}` : '—'}
-                      </td>
-                      <td>
-                        <span className={`badge ${s.payment_type === 'cash' ? 'badge-success' : 'badge-warning'}`} style={{ fontFamily: 'Poppins, sans-serif', whiteSpace: 'nowrap' }}>
-                          {s.payment_type === 'cash' ? 'Cash' : 'Debt'}
-                        </span>
-                      </td>
-                      <td style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontFamily: 'Poppins, sans-serif', whiteSpace: 'nowrap' }}>
-                        {new Date(s.timestamp).toLocaleTimeString()}
-                      </td>
-                    </tr>
-                  ))}
+                  {Array.isArray(sales) && sales.map(s => {
+                    const canUndo = s.can_undo || false;
+                    const undoRemaining = s.undo_remaining || 0;
+
+                    return (
+                      <tr key={s.id}>
+                        <td style={{ fontFamily: 'Poppins, sans-serif', fontWeight: 500, whiteSpace: 'nowrap', color: 'var(--text-primary)' }}>{s.product_name}</td>
+                        <td style={{ fontFamily: 'Poppins, sans-serif', color: 'var(--text-primary)' }}>{s.quantity_sold}</td>
+                        <td style={{ fontFamily: 'Poppins, sans-serif', whiteSpace: 'nowrap', color: 'var(--text-primary)' }}>KSh {fmt(s.total_price)}</td>
+                        <td style={{ fontFamily: 'Poppins, sans-serif', whiteSpace: 'nowrap', color: s.payment_type === 'cash' ? 'var(--accent-green)' : 'var(--text-muted)' }}>
+                          {s.payment_type === 'cash' ? `KSh ${fmt(s.profit)}` : '—'}
+                        </td>
+                        <td>
+                          <span className={`badge ${s.payment_type === 'cash' ? 'badge-success' : 'badge-warning'}`} style={{ fontFamily: 'Poppins, sans-serif', whiteSpace: 'nowrap' }}>
+                            {s.payment_type === 'cash' ? 'Cash' : 'Debt'}
+                          </span>
+                        </td>
+                        <td style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontFamily: 'Poppins, sans-serif', whiteSpace: 'nowrap' }}>
+                          {new Date(s.timestamp).toLocaleTimeString()}
+                        </td>
+                        <td style={{ whiteSpace: 'nowrap' }}>
+                          {canUndo && (
+                            <button
+                              className="btn btn-warning btn-sm"
+                              onClick={() => handleUndoSale(s.id)}
+                              disabled={undoing === s.id}
+                              style={{
+                                fontFamily: 'Poppins, sans-serif',
+                                padding: '0.25rem 0.5rem',
+                                fontSize: '0.7rem',
+                                background: '#F59E0B',
+                                color: '#1E293B',
+                                border: 'none',
+                                borderRadius: '4px',
+                                cursor: undoing === s.id ? 'not-allowed' : 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '0.25rem',
+                                opacity: undoing === s.id ? 0.6 : 1,
+                              }}
+                              title={`Undo sale (${undoRemaining}s remaining)`}
+                            >
+                              <FiUndo size={12} /> {undoing === s.id ? 'Undoing...' : `Undo (${undoRemaining}s)`}
+                            </button>
+                          )}
+                          {s.is_reversed && (
+                            <span style={{
+                              fontSize: '0.7rem',
+                              color: 'var(--accent-red)',
+                              fontFamily: 'Poppins, sans-serif',
+                              fontWeight: 600
+                            }}>
+                              REVERSED
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
